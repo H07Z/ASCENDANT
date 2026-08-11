@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: #05060a;
+}
+
+body {
+  font-family: "Share Tech Mono", ui-monospace, "Courier New", monospace;
+  color: #cfe0f0;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: #ffd24b;
+  color: #05060a;
+}
+
+/* terminal scrollbar */
+.term-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.term-scroll::-webkit-scrollbar-track {
+  background: #0a0f16;
+}
+.term-scroll::-webkit-scrollbar-thumb {
+  background: #2a3540;
+  border: 1px solid #3a4a55;
+}
+.term-scroll::-webkit-scrollbar-thumb:hover {
+  background: #3a4a55;
+}
+
+.glow {
+  text-shadow: 0 0 6px currentColor;
+}
+
+.glow-strong {
+  text-shadow: 0 0 10px currentColor, 0 0 22px currentColor;
+}
+
+.crt-flicker {
+  animation: flicker 4s infinite;
+}
+
+@keyframes flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  48% {
+    opacity: 0.97;
+  }
+  50% {
+    opacity: 0.9;
+  }
+  52% {
+    opacity: 0.98;
+  }
+}
+
+@keyframes scan {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+.scanlines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.18) 3px
+  );
+  mix-blend-mode: multiply;
+  z-index: 50;
+}
+
+button {
+  font-family: inherit;
+}
