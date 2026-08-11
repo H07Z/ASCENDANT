@@ -129,10 +129,18 @@ export function updateEnemy(e: Enemy, ctx: CombatCtx) {
   if (e.ranged) {
     if (Math.abs(dist) < 16 && e.cd <= 0) {
       e.cd = 2.2;
-      const dir = dist >= 0 ? 1 : -1;
+      // bolt leaves the elf's own hand and travels on a true aim vector to the hero
+      const ox = e.x;
+      const oy = e.feetRow - 1;
+      const tx = ctx.player.col;
+      const ty = ctx.player.feetRow - 1.5;
+      const dx = tx - ox;
+      const dy = ty - oy;
+      const len = Math.max(0.001, Math.hypot(dx, dy));
+      const speed = 8;
       ctx.spawnProj({
-        // ranged mobs (Dusk Elf included) aim at the hero torso instead of their own hover height
-        x: e.x, y: ctx.player.feetRow - 1.5, vx: dir * 7, vy: 0, life: 3, dmg: e.atk, color: e.color, fromPlayer: false, symbol: "●",
+        x: ox, y: oy, vx: (dx / len) * speed, vy: (dy / len) * speed, life: 3,
+        dmg: e.atk, color: e.color, fromPlayer: false, symbol: "●",
       });
     }
   } else if (sameHeight && Math.abs(dist) < 5.4 && e.cd <= 0 && !ctx.player.invuln) {
