@@ -8,8 +8,6 @@ import {
   type ClassDef,
   type EnemyDef,
   type Palette,
-  type PetDef,
-  type Rarity,
   type RegionDef,
   type SkillDef,
   type Stats,
@@ -708,113 +706,6 @@ export const REGIONS: RegionDef[] = [
     enemies: ["sky_beast", "float_guard", "arcane_construct", "celestial_knight"], boss: "sky_sovereign", lengthM: 2000,
   },
 ];
-
-// ----------------------------------------------------------
-//  PETS — companion gacha roster
-//  Floating allies that trail the hero and fire on nearby foes.
-// ----------------------------------------------------------
-export const PETS: Record<string, PetDef> = {
-  dust_sprite: {
-    id: "dust_sprite", name: "Dust Sprite", rarity: "COMMON", element: "Earth", color: "#b9a98c",
-    desc: "A drifting mote of ashen dust.", symbol: "·", atkMult: 0.28, cd: 2.0, range: 11,
-    art: [" .-. ", "( o )", " '-' "],
-    bonus: { atk: 4, hp: 40 },
-  },
-  ember_wisp: {
-    id: "ember_wisp", name: "Ember Wisp", rarity: "COMMON", element: "Fire", color: "#ff9a5a",
-    desc: "A flickering cinder that never dies.", symbol: "*", atkMult: 0.30, cd: 1.9, range: 11,
-    art: ["  ^  ", " (*) ", "  v  "],
-    bonus: { atk: 5, crit: 1 },
-  },
-  thorn_kit: {
-    id: "thorn_kit", name: "Thorn Kit", rarity: "UNCOMMON", element: "Nature", color: "#7fd17a",
-    desc: "A bramble cub with needle fangs.", symbol: "+", atkMult: 0.38, cd: 1.8, range: 12,
-    art: [" /\\_/\\ ", "( >w< )", "  \" \"  "],
-    bonus: { atk: 9, hp: 90, eva: 2 },
-  },
-  gale_finch: {
-    id: "gale_finch", name: "Gale Finch", rarity: "UNCOMMON", element: "Wind", color: "#9fe0d0",
-    desc: "Rides the updraft, quick as thought.", symbol: "-", atkMult: 0.35, cd: 1.4, range: 13,
-    art: [" \\   / ", "  >o<  ", "  ---  "],
-    bonus: { atk: 8, atkspd: 0.04, mvspd: 0.02 },
-  },
-  frost_owl: {
-    id: "frost_owl", name: "Frost Owl", rarity: "RARE", element: "Ice", color: "#bfeeff",
-    desc: "Silent hunter of the white waste.", symbol: "❄", atkMult: 0.52, cd: 1.7, range: 13,
-    art: [" /^_^\\ ", "( O O )", " \\_-_/ "],
-    bonus: { atk: 16, hp: 150, crit: 3 },
-  },
-  cinder_imp: {
-    id: "cinder_imp", name: "Cinder Imp", rarity: "RARE", element: "Fire", color: "#ff7a4a",
-    desc: "Mischief wrapped in living flame.", symbol: "*", atkMult: 0.58, cd: 1.9, range: 12,
-    art: [" \\\\o// ", " ( ~ ) ", "  /_\\  "],
-    bonus: { atk: 20, critdmg: 8 },
-  },
-  storm_drake: {
-    id: "storm_drake", name: "Storm Drake", rarity: "EPIC", element: "Storm", color: "#8fb8ff",
-    desc: "A whelp wreathed in rolling thunder.", symbol: "≈", atkMult: 0.78, cd: 1.6, range: 14,
-    art: ["  /\\~/\\  ", " < (oo) >", "  \\ vv /  "],
-    bonus: { atk: 34, hp: 240, crit: 5, skilldmg: 6 },
-  },
-  abyss_eye: {
-    id: "abyss_eye", name: "Abyss Eye", rarity: "EPIC", element: "Void", color: "#b98bff",
-    desc: "It watches, and the dark watches with it.", symbol: "◆", atkMult: 0.84, cd: 1.8, range: 15,
-    art: [" .---. ", "( (@) )", " '---' "],
-    bonus: { atk: 38, mp: 120, critdmg: 14 },
-  },
-  solar_phoenix: {
-    id: "solar_phoenix", name: "Solar Phoenix", rarity: "LEGENDARY", element: "Light", color: "#ffd24b",
-    desc: "Reborn from every ash it leaves.", symbol: "✦", atkMult: 1.15, cd: 1.4, range: 16,
-    art: [" \\ /^\\ / ", "--( <> )--", " / \\_/ \\ "],
-    bonus: { atk: 62, hp: 420, crit: 8, critdmg: 22 },
-  },
-  void_wyrm: {
-    id: "void_wyrm", name: "Void Wyrm", rarity: "LEGENDARY", element: "Void", color: "#c46bff",
-    desc: "A coil of hungry nothingness.", symbol: "§", atkMult: 1.22, cd: 1.5, range: 16,
-    art: [" ~~@~~ ", "( 0-0 )", " ~~~~~ "],
-    bonus: { atk: 68, skilldmg: 18, critdmg: 18 },
-  },
-  astral_seraph: {
-    id: "astral_seraph", name: "Astral Seraph", rarity: "MYTHIC", element: "Astral", color: "#ff6fb0",
-    desc: "Sings the song that shatters sieges.", symbol: "✶", atkMult: 1.65, cd: 1.2, range: 17,
-    art: ["\\  .*.  /", " >( @ )< ", "/  '*'  \\"],
-    bonus: { atk: 110, hp: 700, crit: 12, critdmg: 30, skilldmg: 22 },
-  },
-  eclipse_sovereign: {
-    id: "eclipse_sovereign", name: "Eclipse Sovereign", rarity: "ANCIENT", element: "Eclipse", color: "#ff7d52",
-    desc: "The last crown of a devoured sun.", symbol: "☼", atkMult: 2.2, cd: 1.0, range: 18,
-    art: ["\\\\ /###\\ //", "==( (@) )==", "// \\###/ \\\\"],
-    bonus: { atk: 175, hp: 1100, crit: 16, critdmg: 45, skilldmg: 32, atkspd: 0.08 },
-  },
-};
-
-export const PET_LIST: PetDef[] = Object.values(PETS);
-
-// Gacha pull rates (percent). Displayed to the player in the summon UI.
-export const PET_GACHA_RATES: Record<Rarity, number> = {
-  COMMON: 44,
-  UNCOMMON: 30,
-  RARE: 16,
-  EPIC: 7,
-  LEGENDARY: 2.5,
-  MYTHIC: 0.4,
-  ANCIENT: 0.1,
-};
-
-export const PET_PULL_COST = 30; // crystals per single summon
-export const PET_PULL10_COST = 270; // discounted 10x summon
-export const PET_PITY = 60; // guaranteed LEGENDARY+ within this many pulls
-export const PET_MAX_STAR = 5;
-
-// Duplicate conversion + star scaling
-export const PET_DUPE_SHARDS: Record<Rarity, number> = {
-  COMMON: 2, UNCOMMON: 4, RARE: 8, EPIC: 18, LEGENDARY: 45, MYTHIC: 100, ANCIENT: 220,
-};
-
-/** Multiplier applied to a pet's bonus stats & damage for its star level. */
-export function petStarMult(star: number): number {
-  return 1 + (star - 1) * 0.35;
-}
 
 // ----------------------------------------------------------
 //  Achievements / Titles

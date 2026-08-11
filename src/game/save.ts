@@ -19,12 +19,11 @@ export function loadProfile(): Profile | null {
     if (!raw) return null;
     const obj = JSON.parse(raw) as Profile;
     if (!obj || typeof obj.level !== "number") return null;
-    // migrate older saves that predate the pet system
+    // ---- forward-compatible migrations ----
     if (!Array.isArray(obj.pets)) obj.pets = [];
     if (obj.activePet === undefined) obj.activePet = null;
-    if (typeof obj.petShards !== "number") obj.petShards = 0;
-    if (typeof obj.petPity !== "number") obj.petPity = 0;
-    if (typeof obj.petPulls !== "number") obj.petPulls = 0;
+    if (!obj.gachaPity || typeof obj.gachaPity.epic !== "number") obj.gachaPity = { epic: 0, legendary: 0 };
+    if (typeof obj.totalPulls !== "number") obj.totalPulls = 0;
     return obj;
   } catch {
     return null;
