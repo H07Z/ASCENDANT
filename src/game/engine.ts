@@ -208,6 +208,7 @@ export class Game {
     // immediately visible in-game, even before the first gacha summon.
     if (!Array.isArray(this.profile.pets)) this.profile.pets = [];
     if (typeof this.profile.petShards !== "number") this.profile.petShards = 0;
+    if (typeof this.profile.spiritOrbs !== "number") this.profile.spiritOrbs = 60;
     if (typeof this.profile.petPity !== "number") this.profile.petPity = 0;
     if (typeof this.profile.petPulls !== "number") this.profile.petPulls = 0;
     let grantedStarterPet = false;
@@ -898,6 +899,12 @@ export class Game {
       const id = mats[Math.min(this.run.regionIdx, 3)];
       this.profile.materials[id] = (this.profile.materials[id] ?? 0) + 1;
     }
+    // Spirit Orbs — the dedicated pet-summoning currency
+    if (this.rng.chance(e.elite ? 0.55 : 0.14)) {
+      const orbs = e.elite ? this.rng.int(2, 5) : 1;
+      this.profile.spiritOrbs = (this.profile.spiritOrbs ?? 0) + orbs;
+      this.headText(`+${orbs} ❂`, "#ffa14b");
+    }
     this.checkAchievements();
     this.cb.onDirty?.();
   }
@@ -914,6 +921,10 @@ export class Game {
     this.shake(16);
     this.grantGold(b.gold);
     this.profile.tokens += b.tokens;
+    // bosses are the richest source of Spirit Orbs
+    const bossOrbs = 25 + this.run.regionIdx * 10;
+    this.profile.spiritOrbs = (this.profile.spiritOrbs ?? 0) + bossOrbs;
+    this.headText(`+${bossOrbs} ❂ SPIRIT ORBS`, "#ffa14b");
     this.addExp(b.xp);
     this.floatText(b.x, b.feetRow - b.size[1] - 2, "BOSS DEFEATED!", "#ffd24b");
     // guaranteed drop
@@ -970,7 +981,9 @@ export class Game {
           this.cb.onLoot?.(it);
           const g = 50 + this.run.distance;
           this.grantGold(g);
-          this.headText(`CHEST! +${g}G`, "#ffd24b");
+          const chestOrbs = this.rng.int(3, 8);
+          this.profile.spiritOrbs = (this.profile.spiritOrbs ?? 0) + chestOrbs;
+          this.headText(`CHEST! +${g}G +${chestOrbs}❂`, "#ffd24b");
           this.burst(p.x, 0, "#ffd24b", 14);
         } else if (p.payload) {
           p.dead = true;

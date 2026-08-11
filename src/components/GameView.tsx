@@ -182,11 +182,11 @@ export default function GameView({
   // ---- pet gacha handlers ----
   const doPull = (count: number) => {
     const cost = count === 10 ? PET_PULL10_COST : PET_PULL_COST * count;
-    if (profile.crystals < cost) {
-      setPetMsg("Not enough crystals.");
+    if ((profile.spiritOrbs ?? 0) < cost) {
+      setPetMsg("Not enough Spirit Orbs. Defeat enemies and bosses to gather more.");
       return;
     }
-    profile.crystals -= cost;
+    profile.spiritOrbs -= cost;
     const rng = new RNG(Date.now() + profile.petPulls * 7919);
     const res = pullPetMany(profile, rng, count);
     setPullResults(res);

@@ -294,6 +294,7 @@ export function newProfile(name: string, classId: string): Profile {
     pets: [],
     activePet: null,
     petShards: 0,
+    spiritOrbs: 60,
     petPity: 0,
     petPulls: 0,
     bestDistance: 0,

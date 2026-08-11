@@ -23,6 +23,7 @@ export function loadProfile(): Profile | null {
     if (!Array.isArray(obj.pets)) obj.pets = [];
     if (obj.activePet === undefined) obj.activePet = null;
     if (typeof obj.petShards !== "number") obj.petShards = 0;
+    if (typeof obj.spiritOrbs !== "number") obj.spiritOrbs = 60;
     if (typeof obj.petPity !== "number") obj.petPity = 0;
     if (typeof obj.petPulls !== "number") obj.petPulls = 0;
     return obj;

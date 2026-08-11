@@ -299,6 +299,7 @@ export interface Profile {
   pets: OwnedPet[];
   activePet: string | null;
   petShards: number;
+  spiritOrbs: number;
   petPity: number;
   petPulls: number;
   bestDistance: number;

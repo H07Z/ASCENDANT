@@ -364,7 +364,7 @@ export function PetPanel({
   return (
     <Panel title="COMPANION SANCTUM" onClose={onClose} accent="#ff6fb0" width="max-w-4xl">
       <div className="mb-3 flex flex-wrap items-center gap-3 border border-white/10 bg-black/40 px-3 py-2 text-xs">
-        <span className="text-fuchsia-300">{profile.crystals} ◆ crystals</span>
+        <span className="text-orange-300">{profile.spiritOrbs ?? 0} ❂ spirit orbs</span>
         <span className="text-cyan-300">{profile.petShards} ✧ shards</span>
         <span className="text-slate-400">|</span>
         <span className="text-slate-300">Owned: {profile.pets.length}/{PET_LIST.length}</span>
@@ -389,8 +389,8 @@ export function PetPanel({
               <div className="text-sm glow text-fuchsia-300">Single Summon</div>
               <div className="mt-1 text-[11px] text-slate-400">Bind one companion from the aether.</div>
               <div className="mt-2">
-                <Btn color="#ff6fb0" disabled={profile.crystals < PET_PULL_COST} onClick={() => onPull(1)}>
-                  summon · {PET_PULL_COST} ◆
+                <Btn color="#ff6fb0" disabled={(profile.spiritOrbs ?? 0) < PET_PULL_COST} onClick={() => onPull(1)}>
+                  summon · {PET_PULL_COST} ❂
                 </Btn>
               </div>
             </div>
@@ -398,8 +398,8 @@ export function PetPanel({
               <div className="text-sm glow text-amber-300">Ten Summon</div>
               <div className="mt-1 text-[11px] text-slate-400">Discounted ×10 ritual. Better odds overall.</div>
               <div className="mt-2">
-                <Btn color="#ffd24b" disabled={profile.crystals < PET_PULL10_COST} onClick={() => onPull(10)}>
-                  summon ×10 · {PET_PULL10_COST} ◆
+                <Btn color="#ffd24b" disabled={(profile.spiritOrbs ?? 0) < PET_PULL10_COST} onClick={() => onPull(10)}>
+                  summon ×10 · {PET_PULL10_COST} ❂
                 </Btn>
               </div>
             </div>
@@ -728,7 +728,8 @@ function MerchantCard({
 export function CurrencyPanel({ profile, onClose }: { profile: Profile; onClose: () => void }) {
   const currencies = [
     { icon: "$", name: "Gold", value: profile.gold, use: "Gear, enhancement and skill training", color: "#ffd24b" },
-    { icon: "◆", name: "Crystals", value: profile.crystals, use: "Pet summons and advanced upgrades", color: "#d58cff" },
+    { icon: "◆", name: "Crystals", value: profile.crystals, use: "Skill upgrades and advanced enhancement", color: "#d58cff" },
+    { icon: "❂", name: "Spirit Orbs", value: profile.spiritOrbs ?? 0, use: "Pet summoning at the Companion Sanctum", color: "#ffa14b" },
     { icon: "✦", name: "Boss Tokens", value: profile.tokens, use: "Rare boss equipment and future exchanges", color: "#ff7d52" },
     { icon: "✧", name: "Pet Shards", value: profile.petShards ?? 0, use: "Raise companion star levels", color: "#76dfff" },
     { icon: "+", name: "Stat Points", value: profile.statPoints, use: "Permanent character development", color: "#80e39b" },
@@ -795,12 +796,13 @@ export function GuidePanel({ onClose }: { onClose: () => void }) {
     ],
     progress: [
       { title: "EQUIPMENT", lines: ["Gear drops in seven rarities from COMMON to ANCIENT.", "Equip stronger items from the Bag panel.", "Use the town Blacksmith to enhance equipped gear with gold."] },
-      { title: "SKILLS & STATS", lines: ["Spend gold and crystals to level class skills.", "Leveling increases class stats and grants stat points.", "Titles, equipment and active pets all increase Combat Power."] },
-      { title: "ECONOMY", lines: ["Open Wallet to inspect every currency and material.", "Sell unwanted gear from the Bag for gold.", "Boss Tokens and rare materials are long-term resources."] },
+      { title: "SKILLS & STATS", lines: ["Spend Gold and Crystals to level class skills.", "Crystals are for skills only and are never spent on pets.", "Leveling increases class stats and grants stat points."] },
+      { title: "CURRENCIES", lines: ["Gold: gear, enhancement and skill training.", "Crystals ◆: class skill upgrades and enhancement.", "Spirit Orbs ❂: pet summoning only.", "Pet Shards ✧: raising companion star levels.", "Boss Tokens ✦: rare boss equipment."] },
+      { title: "ECONOMY", lines: ["Open Wallet to inspect every currency and material.", "Sell unwanted gear from the Bag for gold.", "Skill and pet economies are fully separate."] },
     ],
     pets: [
       { title: "UNLOCK", lines: ["The Companion Sanctum unlocks at Level 10.", "A Dust Sprite is granted and equipped automatically.", "Your active pet floats behind you and attacks targets in range."] },
-      { title: "SUMMONING", lines: ["Single summon costs 30 Crystals; ten summons cost 270.", "Rates are displayed in the Sanctum.", "A LEGENDARY-or-better pet is guaranteed within 60 pulls."] },
+      { title: "SUMMONING", lines: ["Summoning uses Spirit Orbs ❂, not Crystals.", "Single summon costs 30 ❂; ten summons cost 270 ❂.", "Spirit Orbs drop from enemies, chests and bosses.", "A LEGENDARY-or-better pet is guaranteed within 60 pulls."] },
       { title: "STARS & BONUSES", lines: ["Duplicate pets raise star level and grant Pet Shards.", "Use shards to star-up companions directly.", "Higher stars increase pet attack damage and owner stat bonuses."] },
     ],
   };

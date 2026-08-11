@@ -801,8 +801,8 @@ export const PET_GACHA_RATES: Record<Rarity, number> = {
   ANCIENT: 0.1,
 };
 
-export const PET_PULL_COST = 30; // crystals per single summon
-export const PET_PULL10_COST = 270; // discounted 10x summon
+export const PET_PULL_COST = 30; // Spirit Orbs per single summon
+export const PET_PULL10_COST = 270; // discounted 10x summon (Spirit Orbs)
 export const PET_PITY = 60; // guaranteed LEGENDARY+ within this many pulls
 export const PET_MAX_STAR = 5;
 
