@@ -5,15 +5,17 @@ import {
   ACHIEVEMENTS,
   BOSSES,
   CLASSES,
+  PETS,
   PLAYER_FRAMES,
   RARITY_COLOR,
   REGIONS,
   SKILLS,
   MID_ART,
+  petStarMult,
 } from "./content";
 import { Grid } from "./renderer";
 import { RNG } from "./rng";
-import { combatPower, expForLevel, generateItem, totalStats } from "./profile";
+import { activePetEntry, combatPower, expForLevel, generateItem, totalStats } from "./profile";
 import {
   type Boss,
   type CombatCtx,
@@ -43,8 +45,10 @@ import {
   PLAYER_COL,
   ROWS,
   type Item,
+  type PetDef,
   type Profile,
   type RunStats,
+  PET_UNLOCK_LEVEL,
   type Stats,
   SLOT_ORDER,
 } from "./types";
@@ -159,6 +163,8 @@ export class Game {
   buffCrit = 0;
   buffTimer = 0;
   autoAttackT = 0;
+  petCd = 0;
+  petBob = 0;
   skillCd: Record<string, number> = {};
 
   // entities
@@ -273,7 +279,7 @@ export class Game {
 
   // --------------------------------------------------------
   private get playerFeetRow(): number {
-    return this.world.groundAt(Math.round(this.worldCol)) - this.height;
+    return this.world.groundAt(Math.round(this.worldCol)) - 1 - this.height;
   }
 
   private weaponY(): number {
@@ -387,6 +393,9 @@ export class Game {
       this.autoAttackT = 0.55 / Math.max(0.4, this.stats.atkspd);
       if (this.findTarget(ranged ? 14 : 6.2)) this.basicAttack();
     }
+
+    // companion pet: floats behind the hero and fires on nearby foes
+    this.updatePet(dt);
 
     // update entities
     const ctx = this.combatCtx(dt);
@@ -556,6 +565,83 @@ export class Game {
       }
     }
     return best;
+  }
+
+  // ---- Companion pet ------------------------------------
+  /** Active pet definition + star, or null when locked/unequipped. */
+  private petState(): { def: PetDef; star: number } | null {
+    const entry = activePetEntry(this.profile);
+    if (!entry) return null;
+    const def = PETS[entry.id];
+    if (!def) return null;
+    return { def, star: entry.star };
+  }
+
+  /** World-space anchor for the floating pet (trails behind & above the hero). */
+  private petPos(): { x: number; y: number } {
+    return {
+      x: this.worldCol - 6,
+      y: this.playerFeetRow - 6 + Math.sin(this.petBob * 2.2) * 0.9,
+    };
+  }
+
+  private updatePet(dt: number) {
+    const pet = this.petState();
+    if (!pet) return;
+    this.petBob += dt;
+    if (this.petCd > 0) this.petCd -= dt;
+    if (this.dead) return;
+
+    const mult = petStarMult(pet.star);
+    const cd = Math.max(0.35, pet.def.cd / (1 + (mult - 1) * 0.25));
+    if (this.petCd > 0) return;
+
+    // find a target within the pet's own range
+    const tgt = this.findTarget(pet.def.range);
+    if (!tgt || tgt.dead || tgt.hp <= 0) return;
+
+    this.petCd = cd;
+    const pos = this.petPos();
+    const dmg = this.stats.atk * pet.def.atkMult * mult;
+    const dx = tgt.x - pos.x;
+    const ty = (tgt as Enemy).feetRow !== undefined ? (tgt as Enemy).feetRow - 1 : pos.y;
+    const speed = 18;
+    const travel = Math.max(1, Math.abs(dx));
+    this.projectiles.push({
+      x: pos.x + 1,
+      y: pos.y,
+      vx: speed,
+      vy: ((ty - pos.y) / travel) * speed,
+      life: 1.6,
+      dmg,
+      color: pet.def.color,
+      fromPlayer: true,
+      symbol: pet.def.symbol,
+      pierce: 1,
+    });
+    // muzzle sparkle
+    this.particles.push({
+      x: pos.x + 1, y: pos.y, vx: 2, vy: -1, life: 0.25, max: 0.25,
+      color: pet.def.color, ch: pet.def.symbol,
+    });
+  }
+
+  private drawPet() {
+    const pet = this.petState();
+    if (!pet) return;
+    const pos = this.petPos();
+    const sx = this.sx(pos.x);
+    if (sx < -8 || sx > COLS + 8) return;
+    const art = pet.def.art;
+    const w = art[0].length;
+    const x0 = sx - Math.floor(w / 2);
+    const y0 = Math.round(pos.y) - art.length + 1;
+    this.grid.blit(art, x0, y0, pet.def.color);
+    // star pips above the pet
+    if (pet.star > 1) {
+      const stars = "★".repeat(pet.star);
+      this.grid.text(sx - Math.floor(stars.length / 2), y0 - 1, stars, "#ffd24b");
+    }
   }
 
   // Nearest living enemy ahead of the hero — used for the TARGET HUD panel.
@@ -838,6 +924,9 @@ export class Game {
       const c = CLASSES[this.profile.classId];
       // auto-allocate growth already in stats; grant bonus allocation to ATK/HP
       this.headText(`LEVEL UP! ${this.profile.level}`, "#5fd17a");
+      if (this.profile.level === PET_UNLOCK_LEVEL) {
+        this.headText("❖ COMPANION SANCTUM UNLOCKED!", "#ff6fb0");
+      }
       this.flash = 0.5;
       this.applyProfile();
       const prev = this.hp;
@@ -1069,6 +1158,7 @@ export class Game {
     this.drawEnemies();
     this.drawBoss();
     this.drawProjectiles();
+    this.drawPet();
     this.drawPlayer();
     this.drawParticles();
     this.drawDmgNums();
@@ -1208,7 +1298,7 @@ export class Game {
       const w = art[0].length;
       const h = art.length;
       const x0 = sx - Math.floor(w / 2);
-      const y0 = e.feetRow - h;
+      const y0 = e.feetRow - h + 1;
       const col = e.hurtT > 0 ? "#ffffff" : e.color;
       if (e.elite) {
         for (let i = -1; i <= w; i++) { this.grid.set(x0 + i, y0 - 1, "*", "#ffd24b"); }
@@ -1239,7 +1329,7 @@ export class Game {
     const w = art[0].length;
     const h = art.length;
     const x0 = sx - Math.floor(w / 2);
-    const y0 = b.feetRow - h;
+    const y0 = b.feetRow - h + 1;
     const enraged = bossPhase(b) >= 3;
     const col = b.hurtT > 0 ? "#ffffff" : enraged ? "#ff5d5d" : b.color;
     this.grid.blit(art, x0, y0, col);
@@ -1280,7 +1370,7 @@ export class Game {
     const sx = PLAYER_COL;
     const feetRow = this.playerFeetRow;
     const h = art.length;
-    const y0 = feetRow - h;
+    const y0 = feetRow - h + 1;
 
     const tint: Record<string, string> = { [head]: headColor, [body]: bodyColor };
     this.grid.blitTinted(art, sx - 2, y0, cls.color, tint);

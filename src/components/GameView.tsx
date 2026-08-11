@@ -1,22 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import { Game, type HudSnapshot } from "../game/engine";
 import { CLASSES, SKILLS } from "../game/content";
-import { generateItem } from "../game/profile";
+import { type PullResult, generateItem, pullPetMany, starUpCost } from "../game/profile";
+import { PETS, PET_MAX_STAR, PET_PULL10_COST, PET_PULL_COST } from "../game/content";
 import { RNG } from "../game/rng";
 import { saveProfile } from "../game/save";
-import { type Item, type Profile, type Slot, SLOT_ORDER, type RunStats } from "../game/types";
+import { type Item, type Profile, type Slot, RARITY_ORDER, SLOT_ORDER, type RunStats } from "../game/types";
+
+const RARITY_RANK: Record<string, number> = Object.fromEntries(RARITY_ORDER.map((r, i) => [r, i]));
 import {
   Btn,
   CharacterPanel,
   DeathPanel,
   InventoryPanel,
   PausePanel,
+  PetPanel,
   SkillsPanel,
   TownPanel,
   skillCost,
 } from "./panels";
 
-type Overlay = "none" | "pause" | "char" | "inv" | "skills" | "town";
+type Overlay = "none" | "pause" | "char" | "inv" | "skills" | "town" | "pets";
 
 export default function GameView({
   profile,
@@ -32,6 +36,8 @@ export default function GameView({
   const [death, setDeath] = useState<RunStats | null>(null);
   const [townRegion, setTownRegion] = useState(0);
   const [townMsg, setTownMsg] = useState("");
+  const [petMsg, setPetMsg] = useState("");
+  const [pullResults, setPullResults] = useState<PullResult[]>([]);
   const [toast, setToast] = useState("");
   const [, bump] = useState(0);
   const deathTown = useRef(false);
@@ -172,6 +178,40 @@ export default function GameView({
     setTownMsg(`${SKILLS[id].name} → Lv ${lvl + 1}!`);
   };
 
+  // ---- pet gacha handlers ----
+  const doPull = (count: number) => {
+    const cost = count === 10 ? PET_PULL10_COST : PET_PULL_COST * count;
+    if (profile.crystals < cost) {
+      setPetMsg("Not enough crystals.");
+      return;
+    }
+    profile.crystals -= cost;
+    const rng = new RNG(Date.now() + profile.petPulls * 7919);
+    const res = pullPetMany(profile, rng, count);
+    setPullResults(res);
+    const best = res.reduce((a, b) => (RARITY_RANK[b.rarity] > RARITY_RANK[a.rarity] ? b : a));
+    setPetMsg(`Summoned! Best: ${PETS[best.petId].name} (${best.rarity})`);
+    refresh();
+  };
+  const equipPet = (id: string | null) => {
+    profile.activePet = id;
+    refresh();
+    setPetMsg(id ? `${PETS[id].name} now fights beside you.` : "Companion dismissed.");
+  };
+  const starUpPet = (id: string) => {
+    const op = profile.pets.find((p) => p.id === id);
+    if (!op || op.star >= PET_MAX_STAR) return;
+    const cost = starUpCost(op.star);
+    if (profile.petShards < cost) {
+      setPetMsg("Not enough shards.");
+      return;
+    }
+    profile.petShards -= cost;
+    op.star += 1;
+    refresh();
+    setPetMsg(`${PETS[id].name} ascended to ★${op.star}!`);
+  };
+
   const leaveTown = () => {
     if (deathTown.current) {
       deathTown.current = false;
@@ -190,61 +230,48 @@ export default function GameView({
   const act = (a: string) => g().input(a);
 
   return (
-    <div className="safe-area fixed inset-0 flex flex-col gap-1 overflow-hidden p-1 sm:gap-2 sm:p-2">
-      {/* rotate-to-landscape prompt (small screens held upright) */}
-      <div className="rotate-prompt fixed inset-0 z-[100] flex-col items-center justify-center gap-3 bg-[#05060a] text-center">
-        <div className="text-4xl text-amber-300 glow">⟳</div>
-        <div className="text-sm tracking-[0.3em] text-amber-300 glow">ROTATE YOUR DEVICE</div>
-        <div className="text-[11px] text-slate-500">ASCENDANT is best played in landscape</div>
-      </div>
-
+    <div className="game-shell flex h-full w-full min-h-0 flex-col items-center justify-center gap-1 p-1.5 sm:gap-2 sm:p-2">
       {/* top toolbar */}
-      <div className="flex w-full shrink-0 items-center justify-between gap-2 text-[10px] sm:text-[11px]">
-        <div className="flex min-w-0 items-baseline gap-2 truncate">
-          <span className="glow shrink-0 text-amber-300">▌ ASCENDANT</span>
-          <span className="truncate text-slate-500">
+      <div className="game-toolbar flex w-full max-w-[1100px] items-center justify-between text-[10px] sm:text-[11px]">
+        <div className="flex gap-2">
+          <span className="glow text-amber-300">▌ ASCENDANT</span>
+          <span className="text-slate-500">
             {profile.name} · {cls.name} · Lv{profile.level}
           </span>
         </div>
-        <div className="flex shrink-0 gap-1">
+        <div className="flex gap-1">
           <Btn color="#7fd0ff" onClick={() => setOverlay("char")}>
-            ▤<span className="hidden sm:inline"> char</span>
+            ▤ char
           </Btn>
           <Btn color="#9fd17a" onClick={() => setOverlay("inv")}>
-            ⚷<span className="hidden sm:inline"> bag</span>
+            ⚷ bag
           </Btn>
           <Btn color="#b98bff" onClick={() => setOverlay("skills")}>
-            ✦<span className="hidden sm:inline"> skills</span>
+            ✦ skills
+          </Btn>
+          <Btn color="#ff6fb0" onClick={() => setOverlay("pets")}>
+            ❖ pets
           </Btn>
           <Btn color="#ffd24b" onClick={() => setOverlay("pause")}>
-            ⏸<span className="hidden sm:inline"> menu</span>
+            ⏸ menu
           </Btn>
         </div>
       </div>
 
-      {/* canvas — scales to fill remaining space while keeping aspect ratio */}
-      <div className="relative flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden">
-        <div
-          className="scanlines relative flex max-h-full min-h-0 max-w-full"
-          style={{ boxShadow: "0 0 50px #08222c55" }}
-        >
-          <canvas
-            ref={canvasRef}
-            className="block border border-cyan-900/40 bg-black"
-            style={{ maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto" }}
-          />
-        </div>
+      {/* canvas */}
+      <div className="game-stage relative w-full max-w-[1100px] overflow-hidden border border-cyan-900/40 bg-black scanlines aspect-[1040/544]" style={{ boxShadow: "0 0 50px #08222c55" }}>
+        <canvas ref={canvasRef} className="block h-full w-full" />
 
         {/* toast */}
         {toast && (
-          <div className="pointer-events-none absolute left-1/2 top-2 z-30 max-w-[90%] -translate-x-1/2 truncate border border-amber-500/40 bg-black/80 px-3 py-1 text-[10px] tracking-wider text-amber-200 glow sm:text-xs">
+          <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2 border border-amber-500/40 bg-black/80 px-4 py-1 text-xs tracking-wider text-amber-200 glow">
             {toast}
           </div>
         )}
       </div>
 
       {/* control bar */}
-      <div className="flex w-full shrink-0 items-stretch justify-center gap-1 sm:gap-1.5">
+      <div className="game-controls flex w-full max-w-[1100px] flex-wrap items-stretch justify-center gap-1">
         <CtrlBtn label="JUMP" keyhint="SPC" color="#7fd0ff" onClick={() => act("jump")} />
         <CtrlBtn label="ATK" keyhint="J" color="#ff8a4a" onClick={() => act("attack")} />
         <CtrlBtn label="DASH" keyhint="SFT" color="#9fd0ff" cd={hud?.dashCd ?? 0} cdMax={1.1} onClick={() => act("dash")} />
@@ -288,6 +315,17 @@ export default function GameView({
       {overlay === "char" && <CharacterPanel profile={profile} onClose={() => setOverlay("none")} />}
       {overlay === "inv" && <InventoryPanel profile={profile} onEquip={equip} onSell={(it) => { profile.inventory = profile.inventory.filter(x => x.uid !== it.uid); profile.gold += Math.round(it.ilvl * 12 * (it.enhance ? 0.7 : 0.4) + 15); persist(); refresh(); flash(`Sold ${it.name}`); }} onClose={() => setOverlay("none")} />}
       {overlay === "skills" && <SkillsPanel profile={profile} onUpgrade={upgradeSkill} onClose={() => setOverlay("none")} />}
+      {overlay === "pets" && (
+        <PetPanel
+          profile={profile}
+          results={pullResults}
+          onPull={doPull}
+          onEquip={equipPet}
+          onStarUp={starUpPet}
+          onClose={() => { setOverlay("none"); setPetMsg(""); }}
+          msg={petMsg}
+        />
+      )}
       {overlay === "town" && (
         <TownPanel
           profile={profile}
@@ -343,21 +381,17 @@ function CtrlBtn({
   const pct = onCd ? Math.min(1, cd / cdMax) : 0;
   return (
     <button
-      // pointerdown fires immediately on touch (no 300ms tap delay)
-      onPointerDown={(e) => {
-        e.preventDefault();
-        onClick();
-      }}
-      className="relative min-w-0 flex-1 touch-manipulation select-none overflow-hidden border px-1 py-1 text-center leading-tight transition-colors hover:bg-white/5 active:bg-white/20 sm:px-2 sm:py-2"
+      onClick={onClick}
+      className="ctrl-btn relative min-w-[56px] flex-1 overflow-hidden border px-1.5 py-1.5 text-center transition-colors hover:bg-white/5 active:bg-white/10 sm:min-w-[64px] sm:px-2 sm:py-2"
       style={{ borderColor: color + (onCd || locked ? "33" : "77"), color: onCd || locked ? "#5a6675" : color }}
     >
-      <div className="truncate text-[9px] uppercase tracking-wide sm:text-[10px] sm:tracking-wider">{label}</div>
-      <div className="hidden text-[9px] opacity-60 sm:block">[{keyhint}]</div>
-      {locked && <div className="text-[8px] text-rose-400 sm:text-[9px]">LOCK</div>}
+      <div className="text-[10px] uppercase tracking-wider">{label}</div>
+      <div className="text-[9px] opacity-60">[{keyhint}]</div>
+      {locked && <div className="text-[9px] text-rose-400">LOCKED</div>}
       {onCd && (
         <>
           <div className="absolute inset-x-0 bottom-0 bg-white/10" style={{ height: `${pct * 100}%` }} />
-          <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white/80 sm:text-sm">
+          <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white/80">
             {cd.toFixed(1)}
           </div>
         </>

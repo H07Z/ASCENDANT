@@ -8,8 +8,6 @@ html,
 body,
 #root {
   height: 100%;
-  /* dynamic viewport height keeps the layout correct when mobile browser bars hide */
-  height: 100dvh;
   margin: 0;
   background: #05060a;
 }
@@ -18,32 +16,7 @@ body {
   font-family: "Share Tech Mono", ui-monospace, "Courier New", monospace;
   color: #cfe0f0;
   overflow: hidden;
-  overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
-  /* prevent pull-to-refresh, double-tap zoom and text selection while playing */
-  touch-action: manipulation;
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* respect notches / rounded corners on phones */
-.safe-area {
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-}
-
-/* show a rotate prompt only when a small screen is held in portrait */
-.rotate-prompt {
-  display: none;
-}
-@media (max-width: 950px) and (orientation: portrait) {
-  .rotate-prompt {
-    display: flex;
-  }
 }
 
 * {
@@ -125,4 +98,69 @@ body {
 
 button {
   font-family: inherit;
+}
+
+/* ---------------------------------------------------------
+   Mobile landscape fit
+   Keeps the whole game visible on short-height devices.
+---------------------------------------------------------- */
+.game-shell {
+  height: 100dvh;
+}
+
+.game-stage {
+  width: min(100%, 1100px);
+  max-height: calc(100dvh - 132px);
+}
+
+@media (max-width: 900px) {
+  .game-stage {
+    max-height: calc(100dvh - 120px);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 540px) {
+  .game-shell {
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .game-toolbar {
+    font-size: 9px;
+  }
+
+  .game-stage {
+    max-height: calc(100dvh - 88px);
+  }
+
+  .game-controls {
+    gap: 4px;
+  }
+
+  .ctrl-btn {
+    min-width: 52px;
+    padding: 4px 5px;
+  }
+
+  .ctrl-btn > div:first-child {
+    font-size: 8px;
+    line-height: 1;
+  }
+
+  .ctrl-btn > div:nth-child(2),
+  .ctrl-btn > div:nth-child(3) {
+    font-size: 8px;
+    line-height: 1;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 430px) {
+  .game-stage {
+    max-height: calc(100dvh - 78px);
+  }
+
+  .ctrl-btn {
+    min-width: 46px;
+    padding: 3px 4px;
+  }
 }

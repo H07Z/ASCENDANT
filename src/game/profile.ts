@@ -1,14 +1,27 @@
 // ============================================================
 //  Persistent profile: creation, stats, leveling, item gen
 // ============================================================
-import { CLASSES, RARITY_WEIGHT, titleStat } from "./content";
+import {
+  CLASSES,
+  PETS,
+  PET_DUPE_SHARDS,
+  PET_GACHA_RATES,
+  PET_LIST,
+  PET_MAX_STAR,
+  PET_PITY,
+  RARITY_WEIGHT,
+  petStarMult,
+  titleStat,
+} from "./content";
 import { RNG } from "./rng";
 import {
   type Item,
+  type OwnedPet,
   type Profile,
   type Rarity,
   type Slot,
   type Stats,
+  PET_UNLOCK_LEVEL,
   RARITY_ORDER,
   SLOT_ORDER,
   emptyStats,
@@ -205,13 +218,35 @@ export function titleBonus(profile: Profile): Stats {
   return s;
 }
 
+/** Stat bonus granted by the currently equipped pet (scaled by its star level). */
+export function petBonus(profile: Profile): Stats {
+  const s = emptyStats();
+  const active = activePetEntry(profile);
+  if (!active) return s;
+  const def = PETS[active.id];
+  if (!def) return s;
+  const mult = petStarMult(active.star);
+  (Object.keys(def.bonus) as (keyof Stats)[]).forEach((k) => {
+    s[k] = (def.bonus[k] ?? 0) * mult;
+  });
+  return s;
+}
+
+/** The owned-pet record for the profile's active pet, if any. */
+export function activePetEntry(profile: Profile): OwnedPet | null {
+  if (!profile.activePet) return null;
+  if (profile.level < PET_UNLOCK_LEVEL) return null;
+  return profile.pets.find((p) => p.id === profile.activePet) ?? null;
+}
+
 export function totalStats(profile: Profile): Stats {
   const base = baseClassStats(profile.classId, profile.level, profile.allocated);
   const eq = equipmentStats(profile);
   const title = titleBonus(profile);
+  const pet = petBonus(profile);
   const s = emptyStats();
   (Object.keys(s) as (keyof Stats)[]).forEach((k) => {
-    let v = base[k] + eq[k] + title[k];
+    let v = base[k] + eq[k] + title[k] + pet[k];
     if (k === "hp" || k === "mp") v = Math.round(v);
     else if (k === "atk" || k === "def") v = Math.round(v);
     s[k] = Math.round(v * 100) / 100;
@@ -256,6 +291,11 @@ export function newProfile(name: string, classId: string): Profile {
     activeTitle: "Novice",
     achievements,
     materials: { iron: 3, leather: 2, crystal_shard: 0 },
+    pets: [],
+    activePet: null,
+    petShards: 0,
+    petPity: 0,
+    petPulls: 0,
     bestDistance: 0,
     totalKills: 0,
     bossRecords: {},
@@ -267,4 +307,79 @@ export function newProfile(name: string, classId: string): Profile {
 
 export function formatNum(n: number): string {
   return Math.floor(n).toLocaleString("en-US");
+}
+
+// ============================================================
+//  PET GACHA
+// ============================================================
+export interface PullResult {
+  petId: string;
+  rarity: Rarity;
+  duplicate: boolean;
+  star: number;
+  shards: number;
+  pity: boolean;
+}
+
+const HIGH_TIERS: Rarity[] = ["LEGENDARY", "MYTHIC", "ANCIENT"];
+
+function rollPetRarity(rng: RNG, forceHigh: boolean): Rarity {
+  if (forceHigh) {
+    // pity break — weighted among the top tiers only
+    return rng.weighted(HIGH_TIERS, [88, 10, 2]);
+  }
+  const tiers = RARITY_ORDER;
+  const weights = tiers.map((r) => PET_GACHA_RATES[r]);
+  return rng.weighted(tiers, weights);
+}
+
+/**
+ * Perform a single summon. Mutates the profile (pets, shards, pity counters).
+ * Assumes the caller already deducted the crystal cost.
+ */
+export function pullPet(profile: Profile, rng: RNG): PullResult {
+  profile.petPulls += 1;
+  profile.petPity += 1;
+
+  const forceHigh = profile.petPity >= PET_PITY;
+  const rarity = rollPetRarity(rng, forceHigh);
+  if (HIGH_TIERS.includes(rarity)) profile.petPity = 0;
+
+  const pool = PET_LIST.filter((p) => p.rarity === rarity);
+  const def = pool.length ? rng.pick(pool) : PET_LIST[0];
+
+  const owned = profile.pets.find((p) => p.id === def.id);
+  let duplicate = false;
+  let shards = 0;
+  let star = 1;
+
+  if (owned) {
+    duplicate = true;
+    if (owned.star < PET_MAX_STAR) {
+      owned.star += 1;
+    } else {
+      // fully starred — convert to shards instead
+      shards = PET_DUPE_SHARDS[def.rarity] * 2;
+    }
+    shards += PET_DUPE_SHARDS[def.rarity];
+    profile.petShards += shards;
+    star = owned.star;
+  } else {
+    profile.pets.push({ id: def.id, star: 1 });
+    // auto-equip the very first pet for convenience
+    if (!profile.activePet) profile.activePet = def.id;
+  }
+
+  return { petId: def.id, rarity: def.rarity, duplicate, star, shards, pity: forceHigh };
+}
+
+export function pullPetMany(profile: Profile, rng: RNG, count: number): PullResult[] {
+  const out: PullResult[] = [];
+  for (let i = 0; i < count; i++) out.push(pullPet(profile, rng));
+  return out;
+}
+
+/** Spend shards to raise a pet's star without pulling duplicates. */
+export function starUpCost(star: number): number {
+  return 40 + star * 60;
 }
