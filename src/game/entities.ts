@@ -61,7 +61,7 @@ export function makeEnemy(spawn: { x: number; enemyId: string; elite: boolean; l
   return {
     kind: "enemy",
     x: spawn.x,
-    feetRow: world.groundAt(Math.round(spawn.x)) - 1,
+    feetRow: world.groundAt(Math.round(spawn.x)),
     vy: 0,
     hp: Math.round(d.hp * diff.hp * (1 + spawn.level * 0.12) * eliteMul),
     maxHp: Math.round(d.hp * diff.hp * (1 + spawn.level * 0.12) * eliteMul),
@@ -114,14 +114,14 @@ export function updateEnemy(e: Enemy, ctx: CombatCtx) {
     const speed = e.ai === "charger" ? 3.4 : 1.7;
     // enemies hold a visible gap in front of the hero instead of overlapping
     if (dist > 2.2) e.x += Math.min(speed * dt, dist - 2.2);
-    e.feetRow = ctx.groundAt(Math.round(e.x)) - 1;
+    e.feetRow = ctx.groundAt(Math.round(e.x));
   } else if (e.ai === "flyer") {
     const speed = 2.0;
     if (dist > 4) e.x += speed * dt;
-    e.feetRow = ctx.groundAt(Math.round(e.x)) - 3.5 - Math.sin(ctx.t * 2 + e.anim) * 0.5;
+    e.feetRow = ctx.groundAt(Math.round(e.x)) - 2.5 - Math.sin(ctx.t * 2 + e.anim) * 0.5;
   } else {
     // turret: stationary
-    e.feetRow = ctx.groundAt(Math.round(e.x)) - 2;
+    e.feetRow = ctx.groundAt(Math.round(e.x)) - 1;
   }
 
   // attack
@@ -191,7 +191,7 @@ export function makeBoss(spawn: { x: number; bossId: string; regionIdx: number; 
     kind: "boss",
     x: spawn.x,
     homeX: spawn.x,
-    feetRow: world.groundAt(Math.round(spawn.x)) - 1,
+    feetRow: world.groundAt(Math.round(spawn.x)),
     hp: Math.round(d.hp * (1 + spawn.level * 0.05) * scale),
     maxHp: Math.round(d.hp * (1 + spawn.level * 0.05) * scale),
     ghostHp: Math.round(d.hp * (1 + spawn.level * 0.05) * scale),
@@ -248,7 +248,7 @@ export function updateBoss(b: Boss, ctx: CombatCtx, def: { attacks: { kind: stri
     if (b.charging < 0 && b.x < ctx.player.col - 1.5) b.charging = 0;
     b.charging *= 0.9;
     if (Math.abs(b.charging) < 0.4) b.charging = 0;
-    b.feetRow = ctx.groundAt(Math.round(b.x)) - 1;
+    b.feetRow = ctx.groundAt(Math.round(b.x));
   } else if (b.kb !== 0) {
     b.x += b.kb * dt;
     b.kb *= 0.85;
@@ -257,7 +257,7 @@ export function updateBoss(b: Boss, ctx: CombatCtx, def: { attacks: { kind: stri
     // drift back toward home if pushed
     const dx = b.homeX - b.x;
     if (Math.abs(dx) > 0.3) b.x += Math.sign(dx) * Math.min(1.5 * dt, Math.abs(dx));
-    b.feetRow = ctx.groundAt(Math.round(b.x)) - 1;
+    b.feetRow = ctx.groundAt(Math.round(b.x));
   }
 
   // attack scheduling

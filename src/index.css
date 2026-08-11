@@ -8,6 +8,8 @@ html,
 body,
 #root {
   height: 100%;
+  /* dynamic viewport height keeps the layout correct when mobile browser bars hide */
+  height: 100dvh;
   margin: 0;
   background: #05060a;
 }
@@ -16,7 +18,32 @@ body {
   font-family: "Share Tech Mono", ui-monospace, "Courier New", monospace;
   color: #cfe0f0;
   overflow: hidden;
+  overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
+  /* prevent pull-to-refresh, double-tap zoom and text selection while playing */
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* respect notches / rounded corners on phones */
+.safe-area {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* show a rotate prompt only when a small screen is held in portrait */
+.rotate-prompt {
+  display: none;
+}
+@media (max-width: 950px) and (orientation: portrait) {
+  .rotate-prompt {
+    display: flex;
+  }
 }
 
 * {

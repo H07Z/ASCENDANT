@@ -36,7 +36,7 @@ export default function App() {
 
   if (screen === "play" && profile) {
     return (
-      <div className="h-screen w-screen overflow-hidden bg-[#05060a]">
+      <div className="h-full w-full overflow-hidden bg-[#05060a]">
         <GameView profile={profile} onQuit={quitToMenu} />
       </div>
     );
@@ -70,10 +70,10 @@ function MenuScreen({
   onWipe: () => void;
 }) {
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-[#05060a] text-cyan-100">
+    <div className="safe-area relative h-full w-full overflow-y-auto bg-[#05060a] text-cyan-100">
       <Backdrop />
-      <div className="relative z-10 flex h-full flex-col items-center justify-center px-4">
-        <pre className="mb-1 text-center text-[10px] leading-none text-cyan-400/70 sm:text-sm">
+      <div className="relative z-10 flex min-h-full flex-col items-center justify-center px-4 py-6">
+        <pre className="mb-1 text-center text-[7px] leading-none text-cyan-400/70 sm:text-sm">
 {`   █████╗ ███████╗██████╗ ███╗   ██╗███████╗██╗████████╗
   ██╔══██╗╚══███╔╝██╔══██╗████╗  ██║██╔════╝██║╚══██╔══╝
   ███████║  ███╔╝ ██████╔╝██╔██╗ ██║█████╗  ██║   ██║   
@@ -178,9 +178,9 @@ function CreateScreen({ onCreate, onBack }: { onCreate: (p: Profile) => void; on
   const [classId, setClassId] = useState(CLASS_LIST[0].id);
 
   return (
-    <div className="relative h-screen w-screen overflow-y-auto bg-[#05060a] text-cyan-100">
+    <div className="safe-area relative h-full w-full overflow-y-auto bg-[#05060a] text-cyan-100">
       <Backdrop />
-      <div className="relative z-10 mx-auto max-w-5xl px-4 py-6">
+      <div className="relative z-10 mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-6">
         <div className="mb-4 flex items-center justify-between">
           <h1 className="text-lg tracking-[0.3em] text-amber-300 glow">▌ FORGE YOUR HERO</h1>
           <button onClick={onBack} className="text-xs uppercase tracking-widest text-slate-400 hover:text-white">

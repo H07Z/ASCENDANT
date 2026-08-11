@@ -273,7 +273,7 @@ export class Game {
 
   // --------------------------------------------------------
   private get playerFeetRow(): number {
-    return this.world.groundAt(Math.round(this.worldCol)) - 1 - this.height;
+    return this.world.groundAt(Math.round(this.worldCol)) - this.height;
   }
 
   private weaponY(): number {
