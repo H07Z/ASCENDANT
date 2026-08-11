@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Game, type HudSnapshot } from "../game/engine";
-import { CLASSES, SKILLS } from "../game/content";
+import { CLASSES, PETS, PET_MAX_STAR, PET_PULL10_COST, PET_PULL_COST, SKILLS } from "../game/content";
 import { type PullResult, generateItem, pullPetMany, starUpCost } from "../game/profile";
-import { PETS, PET_MAX_STAR, PET_PULL10_COST, PET_PULL_COST } from "../game/content";
 import { RNG } from "../game/rng";
 import { saveProfile } from "../game/save";
 import { type Item, type Profile, type Slot, RARITY_ORDER, SLOT_ORDER, type RunStats } from "../game/types";
@@ -11,7 +10,9 @@ const RARITY_RANK: Record<string, number> = Object.fromEntries(RARITY_ORDER.map(
 import {
   Btn,
   CharacterPanel,
+  CurrencyPanel,
   DeathPanel,
+  GuidePanel,
   InventoryPanel,
   PausePanel,
   PetPanel,
@@ -20,7 +21,7 @@ import {
   skillCost,
 } from "./panels";
 
-type Overlay = "none" | "pause" | "char" | "inv" | "skills" | "town" | "pets";
+type Overlay = "none" | "pause" | "char" | "inv" | "skills" | "town" | "pets" | "wallet" | "guide";
 
 export default function GameView({
   profile,
@@ -239,7 +240,7 @@ export default function GameView({
             {profile.name} · {cls.name} · Lv{profile.level}
           </span>
         </div>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap justify-end gap-1">
           <Btn color="#7fd0ff" onClick={() => setOverlay("char")}>
             ▤ char
           </Btn>
@@ -251,6 +252,12 @@ export default function GameView({
           </Btn>
           <Btn color="#ff6fb0" onClick={() => setOverlay("pets")}>
             ❖ pets
+          </Btn>
+          <Btn color="#ffd24b" onClick={() => setOverlay("wallet")}>
+            $ wallet
+          </Btn>
+          <Btn color="#7fd0ff" onClick={() => setOverlay("guide")}>
+            ? guide
           </Btn>
           <Btn color="#ffd24b" onClick={() => setOverlay("pause")}>
             ⏸ menu
@@ -315,6 +322,8 @@ export default function GameView({
       {overlay === "char" && <CharacterPanel profile={profile} onClose={() => setOverlay("none")} />}
       {overlay === "inv" && <InventoryPanel profile={profile} onEquip={equip} onSell={(it) => { profile.inventory = profile.inventory.filter(x => x.uid !== it.uid); profile.gold += Math.round(it.ilvl * 12 * (it.enhance ? 0.7 : 0.4) + 15); persist(); refresh(); flash(`Sold ${it.name}`); }} onClose={() => setOverlay("none")} />}
       {overlay === "skills" && <SkillsPanel profile={profile} onUpgrade={upgradeSkill} onClose={() => setOverlay("none")} />}
+      {overlay === "wallet" && <CurrencyPanel profile={profile} onClose={() => setOverlay("none")} />}
+      {overlay === "guide" && <GuidePanel onClose={() => setOverlay("none")} />}
       {overlay === "pets" && (
         <PetPanel
           profile={profile}

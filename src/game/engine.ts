@@ -204,6 +204,19 @@ export class Game {
 
   // --------------------------------------------------------
   applyProfile(full = false) {
+    // Keep old saves safe and guarantee that the Level 10 pet unlock is
+    // immediately visible in-game, even before the first gacha summon.
+    if (!Array.isArray(this.profile.pets)) this.profile.pets = [];
+    if (typeof this.profile.petShards !== "number") this.profile.petShards = 0;
+    if (typeof this.profile.petPity !== "number") this.profile.petPity = 0;
+    if (typeof this.profile.petPulls !== "number") this.profile.petPulls = 0;
+    let grantedStarterPet = false;
+    if (this.profile.level >= PET_UNLOCK_LEVEL && this.profile.pets.length === 0) {
+      this.profile.pets.push({ id: "dust_sprite", star: 1 });
+      this.profile.activePet = "dust_sprite";
+      grantedStarterPet = true;
+    }
+
     this.stats = totalStats(this.profile);
     const newMaxHp = Math.max(1, Math.round(this.stats.hp));
     const newMaxMp = Math.max(1, Math.round(this.stats.mp));
@@ -219,6 +232,7 @@ export class Game {
       this.hp = Math.min(newMaxHp, Math.round(newMaxHp * ratio));
       this.mp = Math.min(newMaxMp, this.mp);
     }
+    if (grantedStarterPet) this.cb.onDirty?.();
   }
 
   start() {
@@ -636,6 +650,11 @@ export class Game {
     const w = art[0].length;
     const x0 = sx - Math.floor(w / 2);
     const y0 = Math.round(pos.y) - art.length + 1;
+
+    // A small aura makes the companion readable against every region palette.
+    const pulse = Math.floor(this.petBob * 4) % 2 === 0 ? "·" : "*";
+    this.grid.set(x0 - 1, y0 + 1, pulse, pet.def.color);
+    this.grid.set(x0 + w, y0 + 1, pulse, pet.def.color);
     this.grid.blit(art, x0, y0, pet.def.color);
     // star pips above the pet
     if (pet.star > 1) {

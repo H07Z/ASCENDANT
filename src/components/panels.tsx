@@ -724,6 +724,115 @@ function MerchantCard({
   );
 }
 
+// ---------- Wallet ----------
+export function CurrencyPanel({ profile, onClose }: { profile: Profile; onClose: () => void }) {
+  const currencies = [
+    { icon: "$", name: "Gold", value: profile.gold, use: "Gear, enhancement and skill training", color: "#ffd24b" },
+    { icon: "◆", name: "Crystals", value: profile.crystals, use: "Pet summons and advanced upgrades", color: "#d58cff" },
+    { icon: "✦", name: "Boss Tokens", value: profile.tokens, use: "Rare boss equipment and future exchanges", color: "#ff7d52" },
+    { icon: "✧", name: "Pet Shards", value: profile.petShards ?? 0, use: "Raise companion star levels", color: "#76dfff" },
+    { icon: "+", name: "Stat Points", value: profile.statPoints, use: "Permanent character development", color: "#80e39b" },
+  ];
+
+  const materials = [
+    { id: "iron", icon: "Fe", use: "Weapon and armor enhancement" },
+    { id: "leather", icon: "Lt", use: "Light equipment crafting" },
+    { id: "crystal_shard", icon: "Cr", use: "Arcane enhancement material" },
+    { id: "essence", icon: "Es", use: "High-region equipment crafting" },
+  ];
+
+  return (
+    <Panel title="WALLET & MATERIALS" onClose={onClose} accent="#ffd24b" width="max-w-2xl">
+      <div className="mb-2 text-[10px] uppercase tracking-[0.2em] text-slate-500">Core currencies</div>
+      <div className="divide-y divide-white/5 border border-white/10 bg-black/30">
+        {currencies.map((c) => (
+          <div key={c.name} className="grid grid-cols-[34px_1fr_auto] items-center gap-2 px-3 py-2">
+            <span className="text-center text-sm glow" style={{ color: c.color }}>{c.icon}</span>
+            <div>
+              <div className="text-xs" style={{ color: c.color }}>{c.name}</div>
+              <div className="text-[10px] text-slate-500">{c.use}</div>
+            </div>
+            <span className="text-sm tabular-nums text-slate-100">{c.value.toLocaleString()}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mb-2 mt-4 text-[10px] uppercase tracking-[0.2em] text-slate-500">Crafting materials</div>
+      <div className="divide-y divide-white/5 border border-white/10 bg-black/30">
+        {materials.map((m) => (
+          <div key={m.id} className="grid grid-cols-[34px_1fr_auto] items-center gap-2 px-3 py-2">
+            <span className="text-[10px] text-cyan-300">[{m.icon}]</span>
+            <div>
+              <div className="text-xs capitalize text-slate-200">{m.id.replace(/_/g, " ")}</div>
+              <div className="text-[10px] text-slate-500">{m.use}</div>
+            </div>
+            <span className="text-sm tabular-nums text-cyan-200">{(profile.materials[m.id] ?? 0).toLocaleString()}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-3 border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[10px] text-slate-400">
+        Gold and loot persist after defeat. Crystals are primarily earned from world loot, bosses and long-term progression.
+      </div>
+    </Panel>
+  );
+}
+
+// ---------- Guide ----------
+export function GuidePanel({ onClose }: { onClose: () => void }) {
+  const [section, setSection] = useState<"start" | "combat" | "progress" | "pets">("start");
+
+  const guide: Record<typeof section, Array<{ title: string; lines: string[] }>> = {
+    start: [
+      { title: "THE RUN", lines: ["The hero travels automatically from left to right.", "Each encounter is resolved 1v1 before the journey continues.", "Jump over spikes and pits; use Dash for temporary invulnerability."] },
+      { title: "CONTROLS", lines: ["[SPACE / W] Jump", "[J] Attack   [SHIFT / S] Dash   [H] Potion", "[K L U I] Skills   [O] Ultimate   [Q] Auto-combat"] },
+      { title: "YOUR GOAL", lines: ["Defeat enemies, collect loot and gain experience.", "Reach each region boss, defeat it, then visit town.", "There is no final endpoint: regions and difficulty scale forever."] },
+    ],
+    combat: [
+      { title: "BASIC COMBAT", lines: ["Basic attacks trigger automatically when a target enters range.", "Manual skills deal more damage and improve survival.", "The TARGET panel shows enemy rarity, level and animated health."] },
+      { title: "SURVIVAL", lines: ["Dash during boss warnings to avoid incoming damage.", "Jumping clears ground hazards but not every boss attack.", "Use a potion below 40% HP; its cooldown is shown on the control bar."] },
+      { title: "BOSSES", lines: ["Gold-bordered health bars identify bosses.", "SLAM threatens nearby heroes; WAVE fires projectiles.", "RAIN targets your position; CHARGE closes distance quickly."] },
+    ],
+    progress: [
+      { title: "EQUIPMENT", lines: ["Gear drops in seven rarities from COMMON to ANCIENT.", "Equip stronger items from the Bag panel.", "Use the town Blacksmith to enhance equipped gear with gold."] },
+      { title: "SKILLS & STATS", lines: ["Spend gold and crystals to level class skills.", "Leveling increases class stats and grants stat points.", "Titles, equipment and active pets all increase Combat Power."] },
+      { title: "ECONOMY", lines: ["Open Wallet to inspect every currency and material.", "Sell unwanted gear from the Bag for gold.", "Boss Tokens and rare materials are long-term resources."] },
+    ],
+    pets: [
+      { title: "UNLOCK", lines: ["The Companion Sanctum unlocks at Level 10.", "A Dust Sprite is granted and equipped automatically.", "Your active pet floats behind you and attacks targets in range."] },
+      { title: "SUMMONING", lines: ["Single summon costs 30 Crystals; ten summons cost 270.", "Rates are displayed in the Sanctum.", "A LEGENDARY-or-better pet is guaranteed within 60 pulls."] },
+      { title: "STARS & BONUSES", lines: ["Duplicate pets raise star level and grant Pet Shards.", "Use shards to star-up companions directly.", "Higher stars increase pet attack damage and owner stat bonuses."] },
+    ],
+  };
+
+  return (
+    <Panel title="ADVENTURER GUIDE" onClose={onClose} accent="#7fd0ff" width="max-w-3xl">
+      <div className="mb-3 flex flex-wrap gap-1">
+        {(["start", "combat", "progress", "pets"] as const).map((s) => (
+          <Btn key={s} color={section === s ? "#7fd0ff" : "#657282"} onClick={() => setSection(s)}>
+            {s}
+          </Btn>
+        ))}
+      </div>
+      <div className="divide-y divide-white/5 border border-white/10 bg-black/30">
+        {guide[section].map((group) => (
+          <div key={group.title} className="p-3">
+            <div className="mb-1 text-xs tracking-[0.16em] text-cyan-300">▌ {group.title}</div>
+            {group.lines.map((line) => (
+              <div key={line} className="py-0.5 text-[11px] leading-relaxed text-slate-400">
+                <span className="mr-2 text-cyan-700">&gt;</span>{line}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 text-center text-[10px] tracking-wider text-slate-600">
+        Progress is saved automatically in this browser.
+      </div>
+    </Panel>
+  );
+}
+
 // ---------- Death ----------
 export function DeathPanel({
   run,
