@@ -243,6 +243,29 @@ export interface RegionDef {
   lengthM: number;
 }
 
+// ---- Pets ---------------------------------------------------
+export const PET_UNLOCK_LEVEL = 10;
+
+export interface PetDef {
+  id: string;
+  name: string;
+  rarity: Rarity;
+  element: string;
+  color: string;
+  desc: string;
+  art: string[];
+  atkMult: number; // shot damage as a fraction of owner ATK
+  cd: number; // seconds between shots
+  range: number; // attack range in cells
+  symbol: string; // projectile glyph
+  bonus: Partial<Stats>; // owner stat bonus at 1★
+}
+
+export interface OwnedPet {
+  id: string;
+  star: number; // 1..5
+}
+
 // ---- Achievement -------------------------------------------
 export interface Achievement {
   id: string;
@@ -273,17 +296,17 @@ export interface Profile {
   activeTitle: string;
   achievements: Record<string, { p: number; c: boolean }>;
   materials: Record<string, number>;
+  pets: OwnedPet[];
+  activePet: string | null;
+  petShards: number;
+  petPity: number;
+  petPulls: number;
   bestDistance: number;
   totalKills: number;
   bossRecords: Record<string, number>;
   regionsCleared: number;
   autoCombat: boolean;
   sound: boolean;
-  // ---- pet system ----
-  pets: import("./pets").OwnedPet[];
-  activePet: string | null; // uid of equipped pet
-  gachaPity: import("./pets").GachaPity;
-  totalPulls: number;
 }
 
 // ---- Run statistics (resets each run) ----------------------

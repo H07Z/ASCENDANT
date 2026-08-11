@@ -1,25 +1,25 @@
 import { useState } from "react";
-import { ACHIEVEMENTS, CLASSES, PLAYER_FRAMES, RARITY_COLOR, SKILLS } from "../game/content";
-import { combatPower, expForLevel, totalStats } from "../game/profile";
 import {
-  BANNERS,
+  ACHIEVEMENTS,
+  CLASSES,
   PETS,
+  PET_GACHA_RATES,
   PET_LIST,
-  PET_MAX_LEVEL,
-  PET_UNLOCK_LEVEL,
-  PITY_EPIC,
-  PITY_LEGENDARY,
-  type Banner,
-  type BannerId,
-  type PullResult,
-  levelUpCost as petLevelUpCost,
-  petAtkFraction,
-  petBonusStats,
-} from "../game/pets";
+  PET_MAX_STAR,
+  PET_PITY,
+  PET_PULL10_COST,
+  PET_PULL_COST,
+  PLAYER_FRAMES,
+  RARITY_COLOR,
+  SKILLS,
+  petStarMult,
+} from "../game/content";
+import { type PullResult, combatPower, expForLevel, starUpCost, totalStats } from "../game/profile";
 import {
   type Item,
   type Profile,
   type Slot,
+  PET_UNLOCK_LEVEL,
   RARITY_ORDER,
   SLOT_LABEL,
   SLOT_ORDER,
@@ -71,28 +71,28 @@ export function Panel({
   accent?: string;
 }) {
   return (
-    <div className="safe-area fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-2 backdrop-blur-sm sm:p-3">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm">
       <div
-        className={`relative w-full ${width} flex max-h-[95dvh] flex-col overflow-hidden border bg-[#070b12]/95 shadow-2xl`}
+        className={`relative w-full ${width} max-h-[92vh] overflow-hidden border bg-[#070b12]/95 shadow-2xl`}
         style={{ borderColor: accent + "55", boxShadow: `0 0 40px ${accent}22` }}
       >
         <div
-          className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-1.5 sm:px-4 sm:py-2"
+          className="flex items-center justify-between border-b px-4 py-2"
           style={{ borderColor: accent + "33", background: accent + "0d" }}
         >
-          <span className="truncate text-xs tracking-[0.2em] glow sm:text-sm sm:tracking-[0.25em]" style={{ color: accent }}>
+          <span className="text-sm tracking-[0.25em] glow" style={{ color: accent }}>
             ▌ {title}
           </span>
           {onClose && (
             <button
               onClick={onClose}
-              className="shrink-0 text-[10px] uppercase tracking-wider text-slate-400 hover:text-white sm:text-xs"
+              className="text-xs uppercase tracking-wider text-slate-400 hover:text-white"
             >
-              close ✕
+              [esc] close ✕
             </button>
           )}
         </div>
-        <div className="term-scroll min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">{children}</div>
+        <div className="term-scroll max-h-[80vh] overflow-y-auto p-4">{children}</div>
       </div>
     </div>
   );
@@ -316,19 +316,19 @@ export function skillCost(level: number): { gold: number; crystal: number } {
 // ---------- Pets / Gacha ----------
 export function PetPanel({
   profile,
+  results,
   onPull,
   onEquip,
-  onLevelUp,
+  onStarUp,
   onClose,
-  results,
   msg,
 }: {
   profile: Profile;
-  onPull: (banner: BannerId, count: number) => void;
-  onEquip: (uid: string | null) => void;
-  onLevelUp: (uid: string) => void;
+  results: PullResult[];
+  onPull: (count: number) => void;
+  onEquip: (id: string | null) => void;
+  onStarUp: (id: string) => void;
   onClose: () => void;
-  results: PullResult[] | null;
   msg: string;
 }) {
   const [tab, setTab] = useState<"summon" | "collection">("summon");
@@ -336,19 +336,25 @@ export function PetPanel({
 
   if (locked) {
     return (
-      <Panel title="COMPANIONS — LOCKED" onClose={onClose} accent="#8b6a6a">
-        <div className="flex flex-col items-center gap-3 py-8 text-center">
-          <pre className="text-[10px] leading-none text-slate-600">
-{`   .--.
-  ( ?? )
-   '--'`}
+      <Panel title="COMPANION SANCTUM" onClose={onClose} accent="#ff6fb0">
+        <div className="py-8 text-center">
+          <pre className="mb-3 text-[10px] leading-none text-fuchsia-400/60">
+{`   .-"""-.
+  /  o o  \\
+ |    ^    |
+  \\  '-'  /
+   '-----'`}
           </pre>
-          <div className="text-sm tracking-widest text-rose-300">✕ REQUIRES LEVEL {PET_UNLOCK_LEVEL}</div>
-          <div className="text-[11px] text-slate-500">
-            You are level {profile.level}. Reach level {PET_UNLOCK_LEVEL} to bind your first companion.
+          <div className="text-sm tracking-widest text-rose-300">✕ SANCTUM SEALED</div>
+          <div className="mt-2 text-xs text-slate-400">
+            Reach <span className="text-amber-300">Level {PET_UNLOCK_LEVEL}</span> to bind your first companion.
           </div>
-          <div className="mt-2 h-2 w-64 border border-white/10 bg-black/40">
-            <div className="h-full bg-amber-500/60" style={{ width: `${Math.min(100, (profile.level / PET_UNLOCK_LEVEL) * 100)}%` }} />
+          <div className="mt-1 text-[11px] text-slate-500">Current level: {profile.level}</div>
+          <div className="mx-auto mt-3 h-2 w-56 border border-white/10 bg-black/40">
+            <div
+              className="h-full bg-fuchsia-500/60"
+              style={{ width: `${Math.min(100, (profile.level / PET_UNLOCK_LEVEL) * 100)}%` }}
+            />
           </div>
         </div>
       </Panel>
@@ -356,21 +362,20 @@ export function PetPanel({
   }
 
   return (
-    <Panel title="COMPANIONS" onClose={onClose} accent="#b98bff" width="max-w-4xl">
+    <Panel title="COMPANION SANCTUM" onClose={onClose} accent="#ff6fb0" width="max-w-4xl">
       <div className="mb-3 flex flex-wrap items-center gap-3 border border-white/10 bg-black/40 px-3 py-2 text-xs">
-        <span className="text-amber-300">{profile.gold.toLocaleString()} G</span>
-        <span className="text-fuchsia-300">{profile.crystals} ◆</span>
-        <span className="text-slate-500">| Pulls: {profile.totalPulls}</span>
-        <span className="text-slate-500">
-          Pity — EPIC in {Math.max(0, PITY_EPIC - profile.gachaPity.epic)} · LEG in{" "}
-          {Math.max(0, PITY_LEGENDARY - profile.gachaPity.legendary)}
-        </span>
+        <span className="text-fuchsia-300">{profile.crystals} ◆ crystals</span>
+        <span className="text-cyan-300">{profile.petShards} ✧ shards</span>
+        <span className="text-slate-400">|</span>
+        <span className="text-slate-300">Owned: {profile.pets.length}/{PET_LIST.length}</span>
+        <span className="text-slate-400">|</span>
+        <span className="text-amber-300">Pity {profile.petPity}/{PET_PITY}</span>
       </div>
 
-      <div className="mb-3 flex gap-2">
+      <div className="mb-3 flex flex-wrap gap-2">
         {(["summon", "collection"] as const).map((t) => (
-          <Btn key={t} color={tab === t ? "#b98bff" : "#6a7a8a"} onClick={() => setTab(t)}>
-            {t === "summon" ? "✦ Summon" : `❖ Collection (${profile.pets.length}/${PET_LIST.length})`}
+          <Btn key={t} color={tab === t ? "#ff6fb0" : "#6a7a8a"} onClick={() => setTab(t)}>
+            {t === "summon" ? "✦ Summon" : "❖ Collection"}
           </Btn>
         ))}
       </div>
@@ -378,127 +383,137 @@ export function PetPanel({
       {msg && <div className="mb-2 border border-fuchsia-500/30 bg-fuchsia-500/10 px-2 py-1 text-xs text-fuchsia-200">{msg}</div>}
 
       {tab === "summon" && (
-        <div className="space-y-3">
-          {results && results.length > 0 && (
-            <div className="border border-amber-500/40 bg-black/60 p-3">
-              <div className="mb-2 text-[11px] tracking-widest text-amber-300">▮ SUMMON RESULT</div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                {results.map((r, i) => (
-                  <div
-                    key={i}
-                    className="flex flex-col items-center border bg-black/50 p-2 text-center"
-                    style={{ borderColor: rarityColor(r.def.rarity) + "88", boxShadow: `0 0 14px ${rarityColor(r.def.rarity)}33` }}
-                  >
-                    <pre className="text-[9px] leading-none" style={{ color: r.def.color }}>
-                      {r.def.frames[0].join("\n")}
-                    </pre>
-                    <div className="mt-1 text-[9px] tracking-wider" style={{ color: rarityColor(r.def.rarity) }}>
-                      {r.def.rarity}
+        <div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="border border-fuchsia-500/30 bg-black/30 p-3">
+              <div className="text-sm glow text-fuchsia-300">Single Summon</div>
+              <div className="mt-1 text-[11px] text-slate-400">Bind one companion from the aether.</div>
+              <div className="mt-2">
+                <Btn color="#ff6fb0" disabled={profile.crystals < PET_PULL_COST} onClick={() => onPull(1)}>
+                  summon · {PET_PULL_COST} ◆
+                </Btn>
+              </div>
+            </div>
+            <div className="border border-amber-500/40 bg-black/30 p-3">
+              <div className="text-sm glow text-amber-300">Ten Summon</div>
+              <div className="mt-1 text-[11px] text-slate-400">Discounted ×10 ritual. Better odds overall.</div>
+              <div className="mt-2">
+                <Btn color="#ffd24b" disabled={profile.crystals < PET_PULL10_COST} onClick={() => onPull(10)}>
+                  summon ×10 · {PET_PULL10_COST} ◆
+                </Btn>
+              </div>
+            </div>
+          </div>
+
+          {/* rates */}
+          <div className="mt-3 border border-white/10 bg-black/30 p-2">
+            <div className="mb-1 text-[10px] uppercase tracking-widest text-slate-500">▮ Summon Rates</div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px]">
+              {RARITY_ORDER.map((r) => (
+                <span key={r} style={{ color: rarityColor(r) }}>
+                  {r} {PET_GACHA_RATES[r]}%
+                </span>
+              ))}
+            </div>
+            <div className="mt-1 text-[10px] text-slate-500">
+              Guaranteed LEGENDARY or better within {PET_PITY} summons. Duplicates raise ★ (max {PET_MAX_STAR}) and grant shards.
+            </div>
+          </div>
+
+          {/* last results */}
+          {results.length > 0 && (
+            <div className="mt-3">
+              <div className="mb-1 text-[10px] uppercase tracking-widest text-slate-500">▮ Summon Results</div>
+              <div className="grid grid-cols-2 gap-1 sm:grid-cols-5">
+                {results.map((r, i) => {
+                  const def = PETS[r.petId];
+                  return (
+                    <div
+                      key={i}
+                      className="border bg-black/40 p-2 text-center"
+                      style={{ borderColor: rarityColor(r.rarity) + "77" }}
+                    >
+                      <pre className="text-[8px] leading-none" style={{ color: def.color }}>
+                        {def.art.join("\n")}
+                      </pre>
+                      <div className="mt-1 text-[10px] glow" style={{ color: rarityColor(r.rarity) }}>
+                        {def.name}
+                      </div>
+                      <div className="text-[9px] text-slate-500">
+                        {r.duplicate ? `DUPE ★${r.star} +${r.shards}✧` : "NEW!"}
+                      </div>
                     </div>
-                    <div className="text-[10px] text-slate-200">{r.def.name}</div>
-                    {r.duplicate ? (
-                      <div className="text-[9px] text-slate-500">dup · +{r.shards} shard</div>
-                    ) : (
-                      <div className="text-[9px] text-emerald-400">NEW!</div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            {(Object.values(BANNERS) as Banner[]).map((b) => {
-              const bal = b.currency === "gold" ? profile.gold : profile.crystals;
-              const sym = b.currency === "gold" ? "g" : "◆";
-              return (
-                <div key={b.id} className="border bg-black/30 p-3" style={{ borderColor: b.color + "55" }}>
-                  <div className="text-sm glow" style={{ color: b.color }}>{b.name}</div>
-                  <div className="mt-1 text-[11px] text-slate-400">{b.desc}</div>
-                  <div className="mt-2 space-y-0.5 text-[10px] text-slate-500">
-                    {RARITY_ORDER.slice().reverse().map((r) => (
-                      <div key={r} className="flex justify-between">
-                        <span style={{ color: rarityColor(r) }}>{r}</span>
-                        <span>{b.rates[r]}%</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <Btn color={b.color} disabled={bal < b.cost} onClick={() => onPull(b.id, 1)}>
-                      x1 · {b.cost}{sym}
-                    </Btn>
-                    <Btn color={b.color} disabled={bal < b.cost10} onClick={() => onPull(b.id, 10)}>
-                      x10 · {b.cost10}{sym}
-                    </Btn>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
       )}
 
       {tab === "collection" && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
+        <div>
+          <div className="mb-2 flex items-center justify-between">
             <div className="text-[11px] text-slate-400">Equip a companion to fight beside you.</div>
             {profile.activePet && (
-              <Btn color="#8b6a6a" onClick={() => onEquip(null)}>unequip</Btn>
+              <Btn color="#8a94a0" onClick={() => onEquip(null)}>
+                unequip
+              </Btn>
             )}
           </div>
-          {profile.pets.length === 0 && (
-            <div className="py-6 text-center text-xs text-slate-600">No companions yet. Summon one!</div>
-          )}
           <div className="grid gap-2 sm:grid-cols-2">
-            {profile.pets.map((owned) => {
-              const def = PETS[owned.defId];
+            {profile.pets.length === 0 && (
+              <div className="text-xs text-slate-600">No companions bound yet. Try a summon!</div>
+            )}
+            {profile.pets.map((op) => {
+              const def = PETS[op.id];
               if (!def) return null;
-              const active = profile.activePet === owned.uid;
-              const cost = petLevelUpCost(owned.level);
-              const maxed = owned.level >= PET_MAX_LEVEL;
-              const bonus = petBonusStats(def, owned.level);
+              const active = profile.activePet === op.id;
+              const cost = starUpCost(op.star);
+              const mult = petStarMult(op.star);
               return (
                 <div
-                  key={owned.uid}
+                  key={op.id}
                   className="border bg-black/30 p-2"
                   style={{
-                    borderColor: active ? rarityColor(def.rarity) : rarityColor(def.rarity) + "44",
-                    boxShadow: active ? `0 0 18px ${rarityColor(def.rarity)}33` : "none",
+                    borderColor: active ? def.color : rarityColor(def.rarity) + "44",
+                    boxShadow: active ? `0 0 18px ${def.color}33` : "none",
                   }}
                 >
-                  <div className="flex gap-2">
-                    <pre className="text-[9px] leading-none" style={{ color: def.color }}>
-                      {def.frames[0].join("\n")}
+                  <div className="flex items-start gap-2">
+                    <pre className="text-[8px] leading-none" style={{ color: def.color }}>
+                      {def.art.join("\n")}
                     </pre>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-xs" style={{ color: rarityColor(def.rarity) }}>
-                        {def.name} {active && <span className="text-emerald-400">◆</span>}
+                    <div className="flex-1">
+                      <div className="text-xs glow" style={{ color: rarityColor(def.rarity) }}>
+                        {def.name}
                       </div>
-                      <div className="text-[9px] uppercase tracking-wider text-slate-500">
-                        {def.rarity} · Lv {owned.level}/{PET_MAX_LEVEL}
+                      <div className="text-[9px] uppercase tracking-widest text-slate-500">
+                        {def.rarity} · {def.element}
                       </div>
-                      <div className="text-[9px] text-slate-400">
-                        DMG {(petAtkFraction(def, owned.level) * 100).toFixed(0)}% ATK · {def.cd}s
-                      </div>
+                      <div className="text-[10px] text-amber-300">{"★".repeat(op.star)}<span className="text-slate-700">{"★".repeat(PET_MAX_STAR - op.star)}</span></div>
                     </div>
                   </div>
-                  <div className="mt-1 text-[9px] text-slate-400">
-                    {Object.entries(bonus).map(([k, v]) => `${STAT_LABEL[k as keyof typeof STAT_LABEL]}+${v}`).join("  ")}
+                  <div className="mt-1 text-[10px] text-slate-400">{def.desc}</div>
+                  <div className="mt-1 text-[10px] text-slate-300">
+                    DMG {(def.atkMult * mult * 100).toFixed(0)}% ATK · CD {def.cd.toFixed(1)}s · RNG {def.range}
                   </div>
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <span className="text-[9px] text-slate-500">shards {owned.shards}</span>
-                    <div className="flex gap-1">
-                      <Btn
-                        color="#b98bff"
-                        disabled={maxed || owned.shards < cost}
-                        onClick={() => onLevelUp(owned.uid)}
-                      >
-                        {maxed ? "MAX" : `+1 (${cost}◈)`}
-                      </Btn>
-                      <Btn color={rarityColor(def.rarity)} disabled={active} onClick={() => onEquip(owned.uid)}>
-                        {active ? "active" : "equip"}
-                      </Btn>
-                    </div>
+                  <div className="text-[10px] text-emerald-300">
+                    {Object.entries(def.bonus)
+                      .map(([k, v]) => `${STAT_LABEL[k as keyof typeof STAT_LABEL]}+${fmtStat(k, (v as number) * mult)}`)
+                      .join("  ")}
+                  </div>
+                  <div className="mt-2 flex gap-1">
+                    <Btn color={active ? "#5fd17a" : def.color} disabled={active} onClick={() => onEquip(op.id)}>
+                      {active ? "equipped" : "equip"}
+                    </Btn>
+                    <Btn
+                      color="#7fd0ff"
+                      disabled={op.star >= PET_MAX_STAR || profile.petShards < cost}
+                      onClick={() => onStarUp(op.id)}
+                    >
+                      {op.star >= PET_MAX_STAR ? "max ★" : `★ up · ${cost}✧`}
+                    </Btn>
                   </div>
                 </div>
               );
@@ -722,8 +737,8 @@ export function DeathPanel({
   onTown: () => void;
 }) {
   return (
-    <div className="safe-area fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-red-950/80 p-3 backdrop-blur-sm sm:p-4">
-      <div className="my-auto w-full max-w-md border border-red-700/50 bg-black/90 p-4 text-center sm:p-6" style={{ boxShadow: "0 0 60px #ff000022" }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-red-950/80 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md border border-red-700/50 bg-black/90 p-6 text-center" style={{ boxShadow: "0 0 60px #ff000022" }}>
         <pre className="mb-2 text-xs leading-tight text-red-500 glow-strong">
 {`   ██████╗ ██╗   ██╗███████╗
   ██╔═══██╗██║   ██║██╔════╝
@@ -783,10 +798,10 @@ export function PausePanel({
   onToggleAuto: () => void;
 }) {
   return (
-    <div className="safe-area fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-black/80 p-3 backdrop-blur-sm sm:p-4">
-      <div className="my-auto w-full max-w-sm border border-cyan-700/50 bg-black/90 p-4 sm:p-6">
-        <div className="mb-3 text-center text-base tracking-[0.3em] text-cyan-300 glow sm:mb-4 sm:text-lg">⏸ PAUSED</div>
-        <div className="flex flex-col gap-1.5 sm:gap-2">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm border border-cyan-700/50 bg-black/90 p-6">
+        <div className="mb-4 text-center text-lg tracking-[0.3em] text-cyan-300 glow">⏸ PAUSED</div>
+        <div className="flex flex-col gap-2">
           <Btn color="#7fd0ff" onClick={onResume}>▶ resume</Btn>
           <Btn color="#9fd17a" onClick={onChar}>▤ character</Btn>
           <Btn color="#9fd17a" onClick={onInv}>▤ equipment</Btn>
