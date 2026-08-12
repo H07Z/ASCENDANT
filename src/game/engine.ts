@@ -55,6 +55,8 @@ import {
 
 const GRAVITY = 33;
 const JUMP_V = 23;
+const MP_REGEN_INTERVAL = 10; // seconds between mana ticks
+const MP_REGEN_PCT = 0.12; // fraction of max MP restored per tick
 const RUN_BASE = 7.0;
 const DASH_TIME = 0.18;
 
@@ -150,12 +152,23 @@ export class Game {
   animT = 0;
   attackTimer = 0;
   castTimer = 0;
+  // Warrior Cleave leap-attack state machine
+  leapPhase: "none" | "wind" | "air" | "recover" = "none";
+  leapT = 0;
+  leapStartX = 0;
+  leapTargetX = 0;
+  leapPeak = 0;
+  leapDmg = 0;
+  leapRadius = 4;
+  leapCrit = false;
+  leapColor = "#ff8a4a";
   hurtT = 0;
   invuln = 0;
   dashT = 0;
   dashCd = 0;
   potionCd = 0;
   autoCd = 0;
+  mpRegenT = 0; // ticks up; restores MP every MP_REGEN_INTERVAL seconds
   combo = 0;
   comboTimer = 0;
   jumpQueued = false;
@@ -302,6 +315,86 @@ export class Game {
     return this.playerFeetRow - 3;
   }
 
+  // ---- Warrior Cleave: recoil, leap, slam ------------------
+  private startWarriorLeap(mult: number, radius: number) {
+    const tgt = this.findTarget(20) ?? null;
+    const targetX = tgt ? tgt.x : this.worldCol + 6;
+    const gap = Math.max(3, targetX - this.worldCol); // distance to enemy
+    this.leapPhase = "wind";
+    this.leapT = 0;
+    this.leapStartX = this.worldCol;
+    this.leapTargetX = targetX;
+    // higher jump for farther enemies, capped so it stays on-screen
+    this.leapPeak = Math.min(9, 3 + gap * 0.45);
+    const v = this.playerAtkValue(mult, true);
+    this.leapDmg = v.dmg;
+    this.leapCrit = v.crit;
+    this.leapRadius = radius + 1;
+    this.leapColor = "#ff8a4a";
+    this.castTimer = 0.4;
+    this.invuln = Math.max(this.invuln, 0.15);
+    this.headText("CLEAVE!", "#ff8a4a");
+  }
+
+  private updateLeap(dt: number) {
+    this.leapT += dt;
+    const gap = Math.max(1, Math.abs(this.leapTargetX - this.leapStartX));
+    // Phase 1: wind-up recoil — hero steps back for 0.18s
+    if (this.leapPhase === "wind") {
+      const recoil = 2.4;
+      const p = Math.min(1, this.leapT / 0.18);
+      this.worldCol = this.leapStartX - recoil * p;
+      if (this.leapT >= 0.18) {
+        this.leapPhase = "air";
+        this.leapT = 0;
+        this.vy = 0;
+        this.onGround = false;
+        this.height = 0.01;
+      }
+      return;
+    }
+    // Phase 2: parabolic jump onto the target
+    if (this.leapPhase === "air") {
+      const airTime = Math.min(0.9, 0.32 + gap * 0.045);
+      const p = Math.min(1, this.leapT / airTime);
+      // horizontal ease from -recoil to target
+      this.worldCol = this.leapStartX - 2.4 + (this.leapTargetX - (this.leapStartX - 2.4)) * p;
+      // parabola: sin(π·p) gives 0→1→0 with a peak in the middle
+      this.height = Math.sin(Math.PI * p) * this.leapPeak;
+      this.vy = p < 0.5 ? 6 : -6;
+      this.onGround = false;
+      if (p >= 1) {
+        // slam-down impact
+        this.height = 0;
+        this.vy = 0;
+        this.onGround = true;
+        this.worldCol = this.leapTargetX;
+        this.aoeBlast(this.worldCol, this.leapRadius, 0, "###", true);
+        // deliver stored damage in a wide arc
+        for (const e of this.enemies) {
+          if (e.dead) continue;
+          if (Math.abs(e.x - this.worldCol) <= this.leapRadius && Math.abs(e.feetRow - this.playerFeetRow) <= 5) {
+            this.dealDamage(e, this.leapDmg, this.leapCrit, this.leapColor);
+          }
+        }
+        if (this.boss && !this.boss.dead && Math.abs(this.boss.x - this.worldCol) <= this.leapRadius + 2) {
+          this.dealDamage(this.boss, this.leapDmg, this.leapCrit, this.leapColor);
+        }
+        this.shake(9);
+        this.flash = Math.min(1, this.flash + 0.35);
+        this.leapPhase = "recover";
+        this.leapT = 0;
+        this.attackTimer = 0.25;
+      }
+      return;
+    }
+    // Phase 3: brief recovery so the strike reads clearly
+    if (this.leapPhase === "recover") {
+      if (this.leapT >= 0.18) this.leapPhase = "none";
+      return;
+    }
+  }
+
   private update(dt: number) {
     this.t += dt;
     // timers
@@ -314,12 +407,28 @@ export class Game {
     if (this.shakeAmt > 0) this.shakeAmt = Math.max(0, this.shakeAmt - dt * 26);
     if (this.flash > 0) this.flash = Math.max(0, this.flash - dt * 2.6);
     for (const k of Object.keys(this.skillCd)) if (this.skillCd[k] > 0) this.skillCd[k] -= dt;
+
+    // periodic mana regeneration
+    this.mpRegenT += dt;
+    if (this.mpRegenT >= MP_REGEN_INTERVAL) {
+      this.mpRegenT -= MP_REGEN_INTERVAL;
+      if (!this.dead && this.mp < this.maxMp) {
+        const gain = Math.max(1, Math.round(this.maxMp * MP_REGEN_PCT));
+        this.mp = Math.min(this.maxMp, this.mp + gain);
+        this.headText(`+${gain} MP`, "#49b6ff");
+        this.burst(this.worldCol, this.playerFeetRow - 2, "#49b6ff", 5);
+      }
+    }
+
     this.animT += dt;
 
     // movement
     const mv = this.stats.mvspd;
     let speed = RUN_BASE * mv;
     if (this.dashT > 0) { this.dashT -= dt; speed = RUN_BASE * 2.6; this.invuln = Math.max(this.invuln, 0.05); }
+
+    // Warrior Cleave leap sequence (wind → air → recover) drives movement itself
+    if (this.leapPhase !== "none") { this.updateLeap(dt); speed = 0; }
 
     // combat priority: stop completely in front of the enemy so we can fight 1v1 in proper range!
     const isRanged = ["ranger", "mage", "gunner"].includes(this.profile.classId);
@@ -553,7 +662,8 @@ export class Game {
     }
     t.hurtT = 0.16;
     t.kb = Math.max(t.kb, 1.6);
-    this.dmgNum(t.x, t.feetRow - 2, final, crit, color);
+    // damage number appears above the target's head
+    this.dmgNum(t.x, t.feetRow - 5, final, crit, color);
     this.burst(t.x, t.feetRow - 1, color ?? "#ffd24b", crit ? 7 : 4);
     this.combo++;
     this.comboTimer = 2.6;
@@ -727,7 +837,12 @@ export class Game {
       case "cleave":
       case "aoe": {
         const r = def.radius ?? 4;
-        this.aoeBlast(this.worldCol, r, baseMult, def.symbol, def.kind === "aoe");
+        // Warriors perform a scripted leap-attack for Cleave.
+        if (def.kind === "cleave" && this.profile.classId === "warrior") {
+          this.startWarriorLeap(baseMult, r);
+        } else {
+          this.aoeBlast(this.worldCol, r, baseMult, def.symbol, def.kind === "aoe");
+        }
         break;
       }
       case "projectile": {
@@ -860,8 +975,17 @@ export class Game {
   }
   // Floating damage numbers are intentionally disabled — combat feedback is
   // conveyed through hit flashes, particle bursts, shake and the TARGET HP bar.
-  private dmgNum(_x: number, _y: number, _val: number, _crit: boolean, _color?: string) {
-    /* no-op */
+  private dmgNum(x: number, y: number, val: number, crit: boolean, color?: string) {
+    // Damage popup anchored above the target's head; drifts upward and fades.
+    this.dmgNums.push({
+      x: x + this.rng.range(-0.4, 0.4),
+      y,
+      vy: -3.0,
+      life: crit ? 1.1 : 0.85,
+      text: crit ? `${val.toLocaleString("en-US")}!` : val.toLocaleString("en-US"),
+      color: color ?? (crit ? "#ffd24b" : "#ffffff"),
+      size: crit ? 2 : 1,
+    });
   }
   private floatText(x: number, y: number, text: string, color: string) {
     this.floats.push({ x, y, vy: -1.2, life: 1.4, text, color });
@@ -1337,18 +1461,8 @@ export class Game {
         this.grid.text(x0, y0 - 2, "ELITE", "#ffd24b");
       }
       this.grid.blit(art, x0, y0, col);
-      if (e.hp < e.maxHp) {
-        const bw = Math.max(4, w);
-        const pct = e.hp / e.maxHp;
-        const gpct = Math.max(pct, e.ghostHp / e.maxHp);
-        const brow = y0 - 1 - (e.elite ? 1 : 0);
-        for (let i = 0; i < bw; i++) {
-          const f = i / bw;
-          if (f < pct) this.grid.set(x0 + i, brow, "█", "#ff6a4a");
-          else if (f < gpct) this.grid.set(x0 + i, brow, "█", e.hurtT > 0 ? "#ffffff" : "#ffd7c0"); // damage chip
-          else this.grid.set(x0 + i, brow, "░", "#553333");
-        }
-      }
+      // Floating HP bars removed — the TARGET panel + on-hit damage numbers
+      // above the enemy's head deliver clearer, less-cluttered combat feedback.
       void pf;
     }
   }

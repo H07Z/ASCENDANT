@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ACHIEVEMENTS,
   CLASSES,
@@ -311,6 +311,153 @@ export function SkillsPanel({
 
 export function skillCost(level: number): { gold: number; crystal: number } {
   return { gold: 80 + level * 90, crystal: level >= 3 ? Math.floor(level / 2) : 0 };
+}
+
+// ---------- Gacha summon animation ----------
+const RITUAL_FRAMES = [
+  ["    .    ", "   ...   ", "  .....  ", "   ...   ", "    .    "],
+  ["    +    ", "  + . +  ", " .. o .. ", "  + . +  ", "    +    "],
+  ["  \\  |  / ", "   \\ | /  ", "-- (o) --", "   / | \\  ", "  /  |  \\ "],
+  [" \\\\ \\|/ // ", "  \\\\ | //  ", "== ((O)) ==", "  // | \\\\  ", " // /|\\ \\\\ "],
+  ["\\\\\\ \\|/ ///", " \\\\\\|///  ", "===(( ✦ ))===", " ///|\\\\\\  ", "/// /|\\ \\\\\\"],
+];
+
+const RARITY_FLAIR: Record<string, { rings: string; shout: string }> = {
+  COMMON: { rings: "· · ·", shout: "A spirit answers." },
+  UNCOMMON: { rings: "+ + +", shout: "A spirit answers!" },
+  RARE: { rings: "✧ ✧ ✧", shout: "RARE RESONANCE!" },
+  EPIC: { rings: "◆ ◆ ◆", shout: "EPIC SURGE!" },
+  LEGENDARY: { rings: "✦ ✦ ✦", shout: "LEGENDARY AWAKENING!" },
+  MYTHIC: { rings: "✶ ✶ ✶", shout: "MYTHIC CONVERGENCE!!" },
+  ANCIENT: { rings: "☼ ☼ ☼", shout: "★ ANCIENT DESCENT ★" },
+};
+
+export function SummonAnimation({
+  results,
+  onDone,
+}: {
+  results: PullResult[];
+  onDone: () => void;
+}) {
+  const [phase, setPhase] = useState<"charge" | "burst" | "reveal">("charge");
+  const [tick, setTick] = useState(0);
+  const [shown, setShown] = useState(0);
+
+  // best rarity drives the intensity of the ritual
+  const best = results.reduce(
+    (a, b) => (RARITY_ORDER.indexOf(b.rarity) > RARITY_ORDER.indexOf(a.rarity) ? b : a),
+    results[0]
+  );
+  const bestIdx = RARITY_ORDER.indexOf(best.rarity);
+  const bestColor = rarityColor(best.rarity);
+  const flair = RARITY_FLAIR[best.rarity];
+  // rarer pulls charge longer for extra tension
+  const chargeMs = 900 + bestIdx * 180;
+
+  useEffect(() => {
+    const iv = window.setInterval(() => setTick((t) => t + 1), 90);
+    const t1 = window.setTimeout(() => setPhase("burst"), chargeMs);
+    const t2 = window.setTimeout(() => setPhase("reveal"), chargeMs + 420);
+    return () => {
+      window.clearInterval(iv);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [chargeMs]);
+
+  // stagger the card reveals
+  useEffect(() => {
+    if (phase !== "reveal") return;
+    if (shown >= results.length) return;
+    const t = window.setTimeout(() => setShown((s) => s + 1), 110);
+    return () => window.clearTimeout(t);
+  }, [phase, shown, results.length]);
+
+  const frameIdx = Math.min(
+    RITUAL_FRAMES.length - 1,
+    Math.floor((tick / (chargeMs / 90)) * RITUAL_FRAMES.length)
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4 backdrop-blur-sm"
+      style={{ background: phase === "burst" ? `${bestColor}22` : "rgba(0,0,0,0.88)" }}
+    >
+      <div className="w-full max-w-3xl text-center">
+        {phase !== "reveal" && (
+          <div>
+            <pre
+              className="mx-auto block w-fit text-[10px] leading-none sm:text-[13px] sm:leading-tight md:text-lg"
+              style={{
+                color: phase === "burst" ? "#ffffff" : bestColor,
+                textShadow: `0 0 ${phase === "burst" ? 30 : 10 + bestIdx * 4}px ${bestColor}`,
+                transform: phase === "burst" ? "scale(1.35)" : `scale(${1 + frameIdx * 0.05})`,
+                transition: "transform 160ms ease-out",
+              }}
+            >
+              {(phase === "burst" ? RITUAL_FRAMES[RITUAL_FRAMES.length - 1] : RITUAL_FRAMES[frameIdx]).join("\n")}
+            </pre>
+            <div
+              className="mt-4 text-xs tracking-[0.45em]"
+              style={{ color: bestColor, opacity: tick % 2 ? 1 : 0.45 }}
+            >
+              {phase === "burst" ? flair.shout : "SUMMONING"}
+            </div>
+            <div className="mt-2 text-[11px] tracking-[0.3em] text-slate-600">
+              {flair.rings.repeat(1 + bestIdx)}
+            </div>
+          </div>
+        )}
+
+        {phase === "reveal" && (
+          <div>
+            <div
+              className="mb-3 text-sm tracking-[0.35em] glow"
+              style={{ color: bestColor }}
+            >
+              {flair.shout}
+            </div>
+            <div className="mx-auto grid max-w-4xl grid-cols-2 justify-items-center gap-2 sm:grid-cols-5">
+              {results.slice(0, shown).map((r, i) => {
+                const def = PETS[r.petId];
+                const rc = rarityColor(r.rarity);
+                const hi = RARITY_ORDER.indexOf(r.rarity) >= 4;
+                return (
+                  <div
+                    key={i}
+                    className="flex min-w-[140px] flex-col items-center justify-center border bg-black/70 p-2 text-center"
+                    style={{
+                      borderColor: rc,
+                      boxShadow: hi ? `0 0 22px ${rc}88` : `0 0 8px ${rc}44`,
+                      animation: "popIn 260ms ease-out",
+                    }}
+                  >
+                    <pre className="text-[8px] leading-none" style={{ color: def.color }}>
+                      {def.art.join("\n")}
+                    </pre>
+                    <div className="mt-1 text-[10px] glow" style={{ color: rc }}>
+                      {def.name}
+                    </div>
+                    <div className="text-[9px]" style={{ color: rc }}>{r.rarity}</div>
+                    <div className="text-[9px] text-slate-500">
+                      {r.duplicate ? `DUPE ★${r.star} +${r.shards}✧` : "✦ NEW ✦"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {shown >= results.length && (
+              <div className="mt-5">
+                <Btn color={bestColor} onClick={onDone}>
+                  ▶ continue
+                </Btn>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ---------- Pets / Gacha ----------

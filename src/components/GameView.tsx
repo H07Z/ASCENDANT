@@ -17,6 +17,7 @@ import {
   PausePanel,
   PetPanel,
   SkillsPanel,
+  SummonAnimation,
   TownPanel,
   skillCost,
 } from "./panels";
@@ -39,6 +40,7 @@ export default function GameView({
   const [townMsg, setTownMsg] = useState("");
   const [petMsg, setPetMsg] = useState("");
   const [pullResults, setPullResults] = useState<PullResult[]>([]);
+  const [summonAnim, setSummonAnim] = useState<PullResult[] | null>(null);
   const [toast, setToast] = useState("");
   const [, bump] = useState(0);
   const deathTown = useRef(false);
@@ -190,6 +192,7 @@ export default function GameView({
     const rng = new RNG(Date.now() + profile.petPulls * 7919);
     const res = pullPetMany(profile, rng, count);
     setPullResults(res);
+    setSummonAnim(res); // play the ritual reveal
     const best = res.reduce((a, b) => (RARITY_RANK[b.rarity] > RARITY_RANK[a.rarity] ? b : a));
     setPetMsg(`Summoned! Best: ${PETS[best.petId].name} (${best.rarity})`);
     refresh();
@@ -322,6 +325,9 @@ export default function GameView({
       {overlay === "char" && <CharacterPanel profile={profile} onClose={() => setOverlay("none")} />}
       {overlay === "inv" && <InventoryPanel profile={profile} onEquip={equip} onSell={(it) => { profile.inventory = profile.inventory.filter(x => x.uid !== it.uid); profile.gold += Math.round(it.ilvl * 12 * (it.enhance ? 0.7 : 0.4) + 15); persist(); refresh(); flash(`Sold ${it.name}`); }} onClose={() => setOverlay("none")} />}
       {overlay === "skills" && <SkillsPanel profile={profile} onUpgrade={upgradeSkill} onClose={() => setOverlay("none")} />}
+      {summonAnim && summonAnim.length > 0 && (
+        <SummonAnimation results={summonAnim} onDone={() => setSummonAnim(null)} />
+      )}
       {overlay === "wallet" && <CurrencyPanel profile={profile} onClose={() => setOverlay("none")} />}
       {overlay === "guide" && <GuidePanel onClose={() => setOverlay("none")} />}
       {overlay === "pets" && (
