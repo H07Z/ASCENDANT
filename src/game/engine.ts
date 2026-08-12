@@ -1170,18 +1170,54 @@ export class Game {
     if (this.onGround && (this.world.isChasm(ahead) || this.spikes.some((s) => s.x <= ahead + 1 && s.x + s.w >= ahead))) {
       this.jump();
     }
-    // auto-use a ready skill when enemy near
+
+    // auto-use ready skills for ALL classes, including their first learned skill
     if (this.autoCd <= 0) {
-      this.autoCd = 0.6;
+      this.autoCd = 0.55;
       const cls = CLASSES[this.profile.classId];
-      for (let i = 1; i < cls.skills.length; i++) {
-        const id = cls.skills[i];
-        if ((this.skillCd[id] ?? 0) <= 0 && this.mp >= (SKILLS[id].mana)) {
-          const tgt = this.findTarget(8);
-          if (tgt) { this.useSkill(i); break; }
+      const nearTarget = this.findTarget(18);
+      const bossActive = !!this.boss && !this.boss.dead;
+
+      const unlocked = cls.skills
+        .map((id, i) => ({ id, i, def: SKILLS[id], lvl: this.profile.skills[id] ?? 0 }))
+        .filter((s) => s.lvl > 0);
+
+      // 1) survival / support first
+      for (const s of unlocked) {
+        if ((this.skillCd[s.id] ?? 0) > 0 || this.mp < s.def.mana) continue;
+        if (s.def.kind === "heal" && this.hp < this.maxHp * 0.6) {
+          this.useSkill(s.i);
+          return;
+        }
+        if (s.def.kind === "buff" && nearTarget) {
+          this.useSkill(s.i);
+          return;
+        }
+      }
+
+      // 2) offensive skills — boss fights prefer higher-tier skills / ultimate first
+      const ordered = bossActive ? unlocked.slice().sort((a, b) => b.i - a.i) : unlocked;
+      for (const s of ordered) {
+        if ((this.skillCd[s.id] ?? 0) > 0 || this.mp < s.def.mana) continue;
+        if (s.def.kind === "heal" || s.def.kind === "buff") continue;
+
+        const skillRange = Math.max(
+          s.def.range ?? 0,
+          s.def.radius ?? 0,
+          s.def.kind === "projectile" ? 15 : 0,
+          s.def.kind === "dash" ? 10 : 0,
+          s.def.kind === "aoe" || s.def.kind === "cleave" || s.def.kind === "ultimate" ? 8 : 0,
+          6.2
+        );
+
+        const tgt = this.findTarget(skillRange);
+        if (tgt) {
+          this.useSkill(s.i);
+          return;
         }
       }
     }
+
     // auto potion
     if (this.hp < this.maxHp * 0.35 && this.potionCd <= 0) this.potion();
   }
