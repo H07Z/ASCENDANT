@@ -939,6 +939,7 @@ export function GuidePanel({ onClose }: { onClose: () => void }) {
       { title: "THE RUN", lines: ["The hero travels automatically from left to right.", "Each encounter is resolved 1v1 before the journey continues.", "Jump over spikes and pits; use Dash for temporary invulnerability."] },
       { title: "CONTROLS", lines: ["[SPACE / W] Jump", "[J] Attack   [SHIFT / S] Dash   [H] Potion", "[K L U I] Skills   [O] Ultimate   [Q] Auto-combat"] },
       { title: "YOUR GOAL", lines: ["Defeat enemies, collect loot and gain experience.", "Reach each region boss, defeat it, then visit town.", "There is no final endpoint: regions and difficulty scale forever."] },
+      { title: "DIFFICULTY", lines: ["EASY 0–5,000m · NORMAL 5,000–15,000m · HARD 15,000–30,000m", "NIGHTMARE 30,000–50,000m · ABYSS 50,000m+ (scales forever).", "Higher tiers mean stronger foes but richer XP and gold.", "Your current tier is shown next to DIST in the Journey panel.", "Up to 10 heroes can be saved; use Save & Exit to switch safely."] },
     ],
     combat: [
       { title: "BASIC COMBAT", lines: ["Basic attacks trigger automatically when a target enters range.", "Manual skills deal more damage and improve survival.", "The TARGET panel shows enemy rarity, level and animated health."] },
@@ -1049,6 +1050,7 @@ export function PausePanel({
   onInv,
   onSkills,
   onQuit,
+  onSaveExit,
   onToggleAuto,
 }: {
   profile: Profile;
@@ -1057,6 +1059,7 @@ export function PausePanel({
   onInv: () => void;
   onSkills: () => void;
   onQuit: () => void;
+  onSaveExit: () => void;
   onToggleAuto: () => void;
 }) {
   return (
@@ -1071,7 +1074,11 @@ export function PausePanel({
           <Btn color={profile.autoCombat ? "#ffd24b" : "#6a7a8a"} onClick={onToggleAuto}>
             {profile.autoCombat ? "⚙ auto-combat: ON" : "⚙ auto-combat: OFF"}
           </Btn>
+          <Btn color="#5fd17a" onClick={onSaveExit}>💾 save &amp; exit</Btn>
           <Btn color="#ff6a6a" onClick={onQuit}>✕ abandon run</Btn>
+        </div>
+        <div className="mt-3 text-center text-[10px] text-slate-500">
+          Save &amp; Exit stores all progress and returns to character select.
         </div>
       </div>
     </div>

@@ -37,7 +37,7 @@ import {
   updateEnemy,
   updateProjectile,
 } from "./entities";
-import { METERS_PER_CELL, World } from "./world";
+import { METERS_PER_CELL, World, difficultyTier } from "./world";
 import {
   CELL_H,
   CELL_W,
@@ -515,7 +515,27 @@ export class Game {
     if (this.castTimer > 0) this.castTimer -= dt;
     if (this.autoAttackT <= 0) {
       this.autoAttackT = 0.55 / Math.max(0.4, this.stats.atkspd);
-      if (this.findTarget(ranged ? 14 : 6.2)) this.basicAttack();
+      const hasTarget = this.findTarget(ranged ? 14 : 6.2);
+      if (hasTarget) {
+        let usedSkill = false;
+        if (this.autoCd <= 0) {
+          for (let i = 0; i < cls.skills.length; i++) {
+            const sid = cls.skills[i];
+            if ((this.profile.skills[sid] ?? 0) > 0 || i === 0) {
+              const def = SKILLS[sid];
+              if (def && this.mp >= def.mana && (this.skillCd[sid] ?? 0) <= 0) {
+                const tr = def.range ?? (def.radius ? def.radius + 2 : 3);
+                if (this.findTarget(tr)) {
+                  this.useSkill(i);
+                  usedSkill = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        if (!usedSkill) this.basicAttack();
+      }
     }
 
     // companion pet: floats behind the hero and fires on nearby foes
@@ -814,6 +834,7 @@ export class Game {
     const def = SKILLS[id];
     const lvl = this.profile.skills[id] ?? 0;
     if (def.ultimate && lvl <= 0) { this.headText("ULT LOCKED", "#ff6a4a"); return; }
+    // Non-first skills are unlocked once trained; index 0 is always available.
     if (!def.ultimate && index > 0 && lvl <= 0) { this.headText("LEARN SKILL", "#ff6a4a"); return; }
     if ((this.skillCd[id] ?? 0) > 0) return;
     if (this.mp < def.mana) { this.headText("NO MP", "#5fb0ff"); return; }
@@ -1170,54 +1191,18 @@ export class Game {
     if (this.onGround && (this.world.isChasm(ahead) || this.spikes.some((s) => s.x <= ahead + 1 && s.x + s.w >= ahead))) {
       this.jump();
     }
-
-    // auto-use ready skills for ALL classes, including their first learned skill
+    // auto-use a ready skill when enemy near
     if (this.autoCd <= 0) {
-      this.autoCd = 0.55;
+      this.autoCd = 0.6;
       const cls = CLASSES[this.profile.classId];
-      const nearTarget = this.findTarget(18);
-      const bossActive = !!this.boss && !this.boss.dead;
-
-      const unlocked = cls.skills
-        .map((id, i) => ({ id, i, def: SKILLS[id], lvl: this.profile.skills[id] ?? 0 }))
-        .filter((s) => s.lvl > 0);
-
-      // 1) survival / support first
-      for (const s of unlocked) {
-        if ((this.skillCd[s.id] ?? 0) > 0 || this.mp < s.def.mana) continue;
-        if (s.def.kind === "heal" && this.hp < this.maxHp * 0.6) {
-          this.useSkill(s.i);
-          return;
-        }
-        if (s.def.kind === "buff" && nearTarget) {
-          this.useSkill(s.i);
-          return;
-        }
-      }
-
-      // 2) offensive skills — boss fights prefer higher-tier skills / ultimate first
-      const ordered = bossActive ? unlocked.slice().sort((a, b) => b.i - a.i) : unlocked;
-      for (const s of ordered) {
-        if ((this.skillCd[s.id] ?? 0) > 0 || this.mp < s.def.mana) continue;
-        if (s.def.kind === "heal" || s.def.kind === "buff") continue;
-
-        const skillRange = Math.max(
-          s.def.range ?? 0,
-          s.def.radius ?? 0,
-          s.def.kind === "projectile" ? 15 : 0,
-          s.def.kind === "dash" ? 10 : 0,
-          s.def.kind === "aoe" || s.def.kind === "cleave" || s.def.kind === "ultimate" ? 8 : 0,
-          6.2
-        );
-
-        const tgt = this.findTarget(skillRange);
-        if (tgt) {
-          this.useSkill(s.i);
-          return;
+      for (let i = 1; i < cls.skills.length; i++) {
+        const id = cls.skills[i];
+        if ((this.skillCd[id] ?? 0) <= 0 && this.mp >= (SKILLS[id].mana)) {
+          const tgt = this.findTarget(8);
+          if (tgt) { this.useSkill(i); break; }
         }
       }
     }
-
     // auto potion
     if (this.hp < this.maxHp * 0.35 && this.potionCd <= 0) this.potion();
   }
@@ -1622,8 +1607,10 @@ export class Game {
 
     // right panel: distance / region / cp
     g.box(58, 0, COLS - 58, 5, "#7f8c9b", "JOURNEY");
+    const tier = difficultyTier(this.run.distance);
     g.text(60, 1, `REGION: ${REGIONS[this.run.regionIdx]?.name ?? "?"}`, p.accent);
-    g.text(60, 2, `DIST:   ${this.run.distance.toLocaleString("en-US")}m`, "#cfe0ff");
+    g.text(60, 2, `DIST: ${this.run.distance.toLocaleString("en-US")}m`, "#cfe0ff");
+    g.text(60 + `DIST: ${this.run.distance.toLocaleString("en-US")}m`.length + 1, 2, `[${tier.name}]`, tier.color);
     g.text(60, 3, `KILLS:  ${this.run.kills}   CP ${combatPower(this.stats)}`, "#cfe0ff");
     g.text(60, 4, `GOLD ${this.profile.gold}  ◆${this.profile.crystals}`, "#ffd24b");
 

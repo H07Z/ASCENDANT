@@ -7,6 +7,26 @@ import { GROUND_BASE, type RegionDef } from "./types";
 
 export const METERS_PER_CELL = 1.55;
 
+// ---- Difficulty progression tiers --------------------------
+// Enemy strength scales with distance; loot & XP scale alongside so
+// pushing deeper always stays rewarding. Abyss scales infinitely.
+export interface DifficultyTier {
+  name: string;
+  color: string;
+  mult: number;
+  from: number;
+}
+
+export function difficultyTier(dist: number): DifficultyTier {
+  if (dist < 5000) return { name: "EASY", color: "#5fd17a", mult: 1, from: 0 };
+  if (dist < 15000) return { name: "NORMAL", color: "#9fd0ff", mult: 1.25, from: 5000 };
+  if (dist < 30000) return { name: "HARD", color: "#ffd24b", mult: 1.6, from: 15000 };
+  if (dist < 50000) return { name: "NIGHTMARE", color: "#ff8a4a", mult: 2.1, from: 30000 };
+  // Abyss: +10% enemy power per 10,000m forever
+  const abyssMult = 2.8 * (1 + ((dist - 50000) / 10000) * 0.1);
+  return { name: "ABYSS", color: "#ff5d5d", mult: abyssMult, from: 50000 };
+}
+
 export type Spawn =
   | { kind: "enemy"; x: number; enemyId: string; elite: boolean; level: number }
   | { kind: "loot"; x: number; row: number; payload: LootPayload }
@@ -82,12 +102,13 @@ export class World {
 
   difficulty(dist: number): { hp: number; atk: number; xp: number; gold: number; level: number } {
     const level = 1 + Math.floor(dist / 240);
+    const tier = difficultyTier(dist);
     return {
       level,
-      hp: 1 + dist / 820,
-      atk: 1 + dist / 2100,
-      xp: 1 + dist / 2800,
-      gold: 1 + dist / 2500,
+      hp: (1 + dist / 820) * tier.mult,
+      atk: (1 + dist / 2100) * tier.mult,
+      xp: (1 + dist / 2800) * (1 + (tier.mult - 1) * 0.6),
+      gold: (1 + dist / 2500) * (1 + (tier.mult - 1) * 0.6),
     };
   }
 

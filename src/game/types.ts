@@ -279,6 +279,7 @@ export interface Achievement {
 // ---- Persistent profile ------------------------------------
 export interface Profile {
   version: number;
+  id: string;
   name: string;
   classId: string;
   level: number;

@@ -319,6 +319,10 @@ export default function GameView({
             persist();
             bump((n) => n + 1);
           }}
+          onSaveExit={() => {
+            persist();
+            onQuit();
+          }}
           onQuit={onQuit}
         />
       )}

@@ -274,6 +274,7 @@ export function newProfile(name: string, classId: string): Profile {
   const achievements: Profile["achievements"] = {};
   return {
     version: 1,
+    id: "c" + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36),
     name: name || "Hero",
     classId,
     level: 1,

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { CLASS_LIST, CLASSES, PLAYER_FRAMES, SKILLS } from "./game/content";
 import { combatPower, newProfile, totalStats } from "./game/profile";
-import { clearSave, hasSave, loadProfile, saveProfile } from "./game/save";
+import { MAX_CHARACTERS, deleteProfile, listProfiles, saveProfile } from "./game/save";
 import { type Profile, STAT_LABEL, STAT_ORDER } from "./game/types";
+import { difficultyTier } from "./game/world";
 import GameView from "./components/GameView";
 
 type Screen = "menu" | "create" | "play";
@@ -10,28 +11,31 @@ type Screen = "menu" | "create" | "play";
 export default function App() {
   const [screen, setScreen] = useState<Screen>("menu");
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [hasSaved, setHasSaved] = useState(false);
+  const [roster, setRoster] = useState<Profile[]>([]);
+
+  const refreshRoster = () => setRoster(listProfiles());
 
   useEffect(() => {
-    setHasSaved(hasSave());
+    refreshRoster();
   }, []);
 
   const startNew = (p: Profile) => {
-    saveProfile(p);
+    saveProfile(p); // adds a new slot; existing characters untouched
     setProfile(p);
     setScreen("play");
   };
-  const continueGame = () => {
-    const p = loadProfile();
-    if (p) {
-      setProfile(p);
-      setScreen("play");
-    }
+  const playCharacter = (p: Profile) => {
+    setProfile(p);
+    setScreen("play");
   };
   const quitToMenu = () => {
     if (profile) saveProfile(profile);
-    setHasSaved(hasSave());
+    refreshRoster();
     setScreen("menu");
+  };
+  const removeCharacter = (id: string) => {
+    deleteProfile(id);
+    refreshRoster();
   };
 
   if (screen === "play" && profile) {
@@ -46,34 +50,35 @@ export default function App() {
   }
   return (
     <MenuScreen
-      hasSaved={hasSaved}
+      roster={roster}
       onNew={() => setScreen("create")}
-      onContinue={continueGame}
-      onWipe={() => {
-        clearSave();
-        setHasSaved(false);
-      }}
+      onPlay={playCharacter}
+      onDelete={removeCharacter}
     />
   );
 }
 
-// ---------------- MENU ----------------
+// ---------------- MENU / CHARACTER ROSTER ----------------
 function MenuScreen({
-  hasSaved,
+  roster,
   onNew,
-  onContinue,
-  onWipe,
+  onPlay,
+  onDelete,
 }: {
-  hasSaved: boolean;
+  roster: Profile[];
   onNew: () => void;
-  onContinue: () => void;
-  onWipe: () => void;
+  onPlay: (p: Profile) => void;
+  onDelete: (id: string) => void;
 }) {
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const full = roster.length >= MAX_CHARACTERS;
+  const pending = roster.find((p) => p.id === confirmId) ?? null;
+
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#05060a] text-cyan-100">
       <Backdrop />
-      <div className="relative z-10 flex h-full flex-col items-center justify-center px-4">
-        <pre className="mb-1 text-center text-[10px] leading-none text-cyan-400/70 sm:text-sm">
+      <div className="term-scroll relative z-10 flex h-full flex-col items-center overflow-y-auto px-4 py-6">
+        <pre className="mb-1 text-center text-[9px] leading-none text-cyan-400/70 sm:text-sm">
 {`   █████╗ ███████╗██████╗ ███╗   ██╗███████╗██╗████████╗
   ██╔══██╗╚══███╔╝██╔══██╗████╗  ██║██╔════╝██║╚══██╔══╝
   ███████║  ███╔╝ ██████╔╝██╔██╗ ██║█████╗  ██║   ██║   
@@ -81,36 +86,79 @@ function MenuScreen({
   ██║  ██║███████╗██║  ██║██║ ╚████║███████╗██║   ██║   
   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝╚═╝   ╚═╝   `}
         </pre>
-        <div className="mb-6 text-center text-[11px] tracking-[0.4em] text-amber-300/80 glow">
+        <div className="mb-4 text-center text-[11px] tracking-[0.4em] text-amber-300/80 glow">
           ASCII MMORPG · ENDLESS RUNNER · v0.1
         </div>
 
-        <div className="flex w-full max-w-md flex-col gap-2">
-          {hasSaved && (
-            <BigBtn color="#5fd17a" onClick={onContinue}>
-              ▶ continue saga
-            </BigBtn>
+        {/* character roster */}
+        <div className="w-full max-w-2xl">
+          <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-widest text-slate-500">
+            <span>▮ Characters ({roster.length}/{MAX_CHARACTERS})</span>
+            {full && <span className="text-rose-400">roster full — delete a hero to create another</span>}
+          </div>
+
+          {roster.length === 0 && (
+            <div className="mb-3 border border-white/10 bg-black/40 px-4 py-6 text-center text-xs text-slate-500">
+              No heroes yet. Forge your first ascendant below.
+            </div>
           )}
-          <BigBtn color="#7fd0ff" onClick={onNew}>
-            ✦ new ascension
+
+          <div className="mb-3 flex flex-col gap-1.5">
+            {roster.map((p) => {
+              const cls = CLASSES[p.classId];
+              const tier = difficultyTier(p.bestDistance);
+              return (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-3 border border-white/10 bg-black/40 px-3 py-2 transition-colors hover:border-cyan-700/50"
+                >
+                  <span className="text-lg" style={{ color: cls?.color ?? "#fff" }}>
+                    {cls?.headGlyph ?? "O"}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="text-sm glow" style={{ color: cls?.color ?? "#fff" }}>{p.name}</span>
+                      <span className="text-[10px] text-slate-500">
+                        Lv{p.level} {cls?.name ?? "?"} · "{p.activeTitle}"
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      best {p.bestDistance.toLocaleString()}m
+                      <span className="ml-1" style={{ color: tier.color }}>[{tier.name}]</span>
+                      <span className="ml-2 text-amber-300/80">{p.gold.toLocaleString()}g</span>
+                      <span className="ml-2 text-slate-500">{p.totalKills.toLocaleString()} kills</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onPlay(p)}
+                    className="border border-emerald-500/50 px-3 py-1.5 text-[11px] uppercase tracking-wider text-emerald-300 hover:bg-emerald-500/10"
+                  >
+                    ▶ play
+                  </button>
+                  <button
+                    onClick={() => setConfirmId(p.id)}
+                    className="border border-rose-500/30 px-2 py-1.5 text-[11px] text-rose-400/70 hover:bg-rose-500/10 hover:text-rose-300"
+                    title="Delete character"
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          <BigBtn color="#7fd0ff" onClick={onNew} disabled={full}>
+            ✦ new ascension {full ? `(max ${MAX_CHARACTERS})` : ""}
           </BigBtn>
-          {hasSaved && (
-            <button
-              onClick={onWipe}
-              className="mt-1 text-[10px] uppercase tracking-widest text-slate-600 hover:text-rose-400"
-            >
-              ✕ erase saved hero
-            </button>
-          )}
         </div>
 
-        <div className="mt-8 max-w-lg text-center text-[11px] leading-relaxed text-slate-400">
+        <div className="mt-6 max-w-lg text-center text-[11px] leading-relaxed text-slate-400">
           An infinite world rendered entirely in <span className="text-cyan-300">letters, symbols &amp; glyphs</span>.
           Run forever through six shifting regions. Slay, loot, level, and fell towering bosses —
           all inside a living terminal.
         </div>
 
-        <div className="mt-5 flex flex-wrap justify-center gap-x-4 gap-y-1 text-[10px] text-slate-500">
+        <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-1 pb-4 text-[10px] text-slate-500">
           <span>[SPC] jump</span>
           <span>[J] attack</span>
           <span>[K/L/U/I] skills</span>
@@ -121,6 +169,37 @@ function MenuScreen({
           <span>[Q] auto-combat</span>
         </div>
       </div>
+
+      {/* delete confirmation */}
+      {pending && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm border border-rose-700/60 bg-black/95 p-5 text-center" style={{ boxShadow: "0 0 40px #ff000022" }}>
+            <div className="text-sm tracking-[0.25em] text-rose-400 glow">⚠ DELETE HERO</div>
+            <div className="mt-3 text-xs text-slate-300">
+              Are you sure you want to delete
+              <span className="mx-1 text-amber-300">{pending.name}</span>
+              (Lv{pending.level} {CLASSES[pending.classId]?.name})?
+            </div>
+            <div className="mt-1 text-[10px] text-rose-400/80">
+              This cannot be undone. All progress, gear and pets will be lost.
+            </div>
+            <div className="mt-4 flex justify-center gap-3">
+              <button
+                onClick={() => { onDelete(pending.id); setConfirmId(null); }}
+                className="border border-rose-500/60 px-4 py-2 text-xs uppercase tracking-wider text-rose-300 hover:bg-rose-500/10"
+              >
+                ✕ yes, delete
+              </button>
+              <button
+                onClick={() => setConfirmId(null)}
+                className="border border-slate-500/40 px-4 py-2 text-xs uppercase tracking-wider text-slate-300 hover:bg-white/5"
+              >
+                ‹ keep hero
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
