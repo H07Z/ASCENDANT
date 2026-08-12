@@ -166,11 +166,14 @@ export class World {
       }
 
       const roll = this.rng.next();
-      const eliteChance = Math.min(0.22, 0.03 + dist / 11000);
+      const tier = difficultyTier(dist);
+      // spawn density increases with difficulty tier: harder regions have tighter roll thresholds
+      const densityMult = tier.mult; // 1x (easy) → 2.8x (abyss)
+      const eliteChance = Math.min(0.35, (0.03 + dist / 11000) * densityMult);
 
       // A wide, clean gap always separates one encounter/obstacle from the next —
       // mirrors a simple 1v1 "battle arena" pacing instead of cluttered terrain.
-      const CLEAR_GAP = 22;
+      const CLEAR_GAP = Math.max(4, Math.round(22 / Math.sqrt(densityMult)));
 
       if (roll < 0.03 + dist / 70000) {
         // chasm gap (jumpable — kept narrow so a timed jump always clears it)
@@ -178,8 +181,8 @@ export class World {
         this.chasms.push([col, col + w]);
         this.genCol += w + CLEAR_GAP;
         continue;
-      } else if (roll < 0.07) {
-        // chest — open ground around it, nothing crowding it
+      } else if (roll < (0.07 / densityMult)) {
+        // chest — open ground around it, nothing crowding it (less frequent in harder tiers, enemies dominate)
         const g = this.groundAt(col);
         this.spawns.push({ kind: "chest", x: col, row: g - 3, tier: info.regionIdx + info.cycle });
         this.genCol += CLEAR_GAP;
@@ -191,38 +194,39 @@ export class World {
         this.spawns.push({ kind: "npc", x: col, row: g - 4, npc: this.rng.pick(npcs) });
         this.genCol += CLEAR_GAP + 4;
         continue;
-      } else if (roll < 0.15) {
+      } else if (roll < (0.15 / densityMult)) {
         // platform — isolated, reachable, no overlap with anything else
         const g = this.groundAt(col);
         const topRow = g - this.rng.int(4, 7);
         this.spawns.push({ kind: "platform", x: col, w: this.rng.int(4, 7), topRow });
         this.genCol += CLEAR_GAP;
         continue;
-      } else if (roll < 0.20) {
+      } else if (roll < (0.20 / densityMult)) {
         // spike hazard — kept short and clear of the next encounter
         const g = this.groundAt(col);
         this.spawns.push({ kind: "spike", x: col, w: this.rng.int(2, 3), row: g - 1 });
         this.genCol += CLEAR_GAP;
         continue;
-      } else if (roll < 0.27) {
+      } else if (roll < 0.27 * densityMult) {
         // world loot
         const g = this.groundAt(col);
         const pay = this.rollLoot(dist, info.regionIdx, false);
         this.spawns.push({ kind: "loot", x: col, row: g - 3, payload: pay });
         this.genCol += CLEAR_GAP;
         continue;
-      } else if (roll < 0.27 + eliteChance) {
-        // elite — spawns alone in a clean arena, no clutter nearby
+      } else if (roll < (0.27 + eliteChance) * densityMult) {
+        // elite — spawns alone in a clean arena; frequency scales with difficulty
         const id = this.rng.pick(info.region.enemies);
         this.spawns.push({ kind: "enemy", x: col, enemyId: id, elite: true, level: diff.level + 2 });
         this.genCol += CLEAR_GAP + 10;
         continue;
       } else {
         // single enemy encounter — strict 1v1 arena, generously spaced from
-        // whatever came before and whatever comes next
+        // whatever came before and whatever comes next; frequency increases with tier
         const id = this.rng.pick(info.region.enemies);
         this.spawns.push({ kind: "enemy", x: col, enemyId: id, elite: false, level: diff.level });
-        this.genCol += CLEAR_GAP + this.rng.int(4, 12);
+        // spacing shrinks at higher difficulty for tighter combat pacing
+        this.genCol += Math.round(CLEAR_GAP / Math.sqrt(densityMult)) + this.rng.int(2, 8);
         continue;
       }
     }

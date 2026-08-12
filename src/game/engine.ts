@@ -176,6 +176,11 @@ export class Game {
   buffCrit = 0;
   buffTimer = 0;
   autoAttackT = 0;
+  rapidLockT = 0;
+  rapidShotsLeft = 0;
+  rapidShotT = 0;
+  rapidDmg = 0;
+  rapidColor = "#5fd17a";
   petCd = 0;
   petBob = 0;
   skillCd: Record<string, number> = {};
@@ -311,8 +316,15 @@ export class Game {
   }
 
   private weaponY(): number {
-    // matches the hand row drawn in drawPlayer: y0 + 1, where y0 = feetRow - 4
-    return this.playerFeetRow - 3;
+    // Matches the weapon overlay row in drawPlayer: wy = y0 + 1, where
+    // y0 = feetRow - h + 1 and h = 4, so wy = feetRow - 2.
+    return this.playerFeetRow - 2;
+  }
+
+  private weaponTipX(): number {
+    const glyph = CLASSES[this.profile.classId]?.weaponGlyph ?? ">";
+    // weapon overlay starts at worldCol + 2; projectile begins at the last visible glyph
+    return this.worldCol + 2 + Math.max(1, glyph.length - 1);
   }
 
   // ---- Warrior Cleave: recoil, leap, slam ------------------
@@ -427,12 +439,15 @@ export class Game {
     let speed = RUN_BASE * mv;
     if (this.dashT > 0) { this.dashT -= dt; speed = RUN_BASE * 2.6; this.invuln = Math.max(this.invuln, 0.05); }
 
+    // Ranger/Gunner Rapid Fire locks the hero in place while the burst resolves.
+    if (this.rapidLockT > 0) { this.updateRapidFire(dt); speed = 0; }
+
     // Warrior Cleave leap sequence (wind → air → recover) drives movement itself
     if (this.leapPhase !== "none") { this.updateLeap(dt); speed = 0; }
 
     // combat priority: stop completely in front of the enemy so we can fight 1v1 in proper range!
     const isRanged = ["ranger", "mage", "gunner"].includes(this.profile.classId);
-    const stopDistance = isRanged ? 9.0 : 4.0;
+    const stopDistance = this.profile.classId === "ranger" ? 18.0 : isRanged ? 9.0 : 4.0;
     const frontTarget = this.findTarget(stopDistance);
     if (frontTarget && !frontTarget.dead && frontTarget.hp > 0) {
       speed = 0;
@@ -442,7 +457,7 @@ export class Game {
     this.cameraX = this.worldCol - PLAYER_COL;
 
     // Only progress run animation when moving; hold standing pose during combat stops
-    if (!this.dead && speed === 0 && this.state === "run" && (frontTarget && !frontTarget.dead && frontTarget.hp > 0)) {
+    if (!this.dead && speed === 0 && this.state === "run" && ((frontTarget && !frontTarget.dead && frontTarget.hp > 0) || this.rapidLockT > 0)) {
       this.animT = 0;
     } else {
       this.animT += dt;
@@ -513,9 +528,9 @@ export class Game {
     const ranged = ["ranger", "mage", "gunner"].includes(this.profile.classId);
     if (this.attackTimer > 0) this.attackTimer -= dt;
     if (this.castTimer > 0) this.castTimer -= dt;
-    if (this.autoAttackT <= 0) {
+    if (this.autoAttackT <= 0 && this.rapidLockT <= 0) {
       this.autoAttackT = 0.55 / Math.max(0.4, this.stats.atkspd);
-      const hasTarget = this.findTarget(ranged ? 14 : 6.2);
+      const hasTarget = this.findTarget(this.profile.classId === "ranger" ? 22 : ranged ? 14 : 6.2);
       if (hasTarget) {
         let usedSkill = false;
         if (this.autoCd <= 0) {
@@ -524,7 +539,7 @@ export class Game {
             if ((this.profile.skills[sid] ?? 0) > 0 || i === 0) {
               const def = SKILLS[sid];
               if (def && this.mp >= def.mana && (this.skillCd[sid] ?? 0) <= 0) {
-                const tr = def.range ?? (def.radius ? def.radius + 2 : 3);
+                const tr = Math.max(def.range ?? (def.radius ? def.radius + 2 : 3), this.profile.classId === "ranger" ? 20 : 0);
                 if (this.findTarget(tr)) {
                   this.useSkill(i);
                   usedSkill = true;
@@ -625,8 +640,17 @@ export class Game {
   private realizeSpawn(s: World["spawns"][number]) {
     switch (s.kind) {
       case "enemy": {
-        const hasActiveEnemy = this.enemies.some((e) => !e.dead && e.hp > 0) || (this.boss && !this.boss.dead && this.boss.hp > 0);
-        if (!hasActiveEnemy) {
+        // Max concurrent enemies scales with difficulty tier:
+        // EASY 1-2, NORMAL 2-3, HARD 3-4, NIGHTMARE 4-5, ABYSS 5-6.
+        const tier = difficultyTier(this.run.distance);
+        const maxConcurrent =
+          tier.name === "EASY" ? 2 :
+          tier.name === "NORMAL" ? 3 :
+          tier.name === "HARD" ? 4 :
+          tier.name === "NIGHTMARE" ? 5 : 6;
+        if (this.boss && !this.boss.dead && this.boss.hp > 0) break; // no adds during boss
+        const activeEnemies = this.enemies.filter((e) => !e.dead && e.hp > 0).length;
+        if (activeEnemies < maxConcurrent) {
           this.enemies.push(makeEnemy(s, this.world));
         }
         break;
@@ -814,7 +838,7 @@ export class Game {
       const wpn = this.profile.equipment.weapon;
       const sym = this.profile.classId === "mage" ? "*" : this.profile.classId === "gunner" ? "•" : ">";
       this.projectiles.push({
-        x: this.worldCol + 5, y: this.weaponY(), vx: 16, vy: 0, life: 1.4,
+        x: this.weaponTipX(), y: this.weaponY(), vx: 16, vy: 0, life: 1.4,
         dmg: this.playerAtkValue(1, false).dmg, color: wpn ? RARITY_COLOR[wpn.rarity] : cls.color,
         fromPlayer: true, symbol: sym, pierce: 1,
       });
@@ -825,6 +849,34 @@ export class Game {
         this.dealDamage(tgt, v.dmg, v.crit, cls.color);
       }
     }
+  }
+
+  private startRapidFire(mult: number, color: string) {
+    const shots = this.rng.int(2, 3);
+    this.rapidShotsLeft = shots;
+    this.rapidShotT = 0;
+    this.rapidLockT = 0.16 + shots * 0.13;
+    this.rapidDmg = this.playerAtkValue(mult, true).dmg;
+    this.rapidColor = color;
+    this.attackTimer = this.rapidLockT;
+    this.headText(`RAPID x${shots}`, color);
+  }
+
+  private updateRapidFire(dt: number) {
+    this.rapidLockT = Math.max(0, this.rapidLockT - dt);
+    this.rapidShotT -= dt;
+    if (this.rapidShotsLeft <= 0) return;
+    if (this.rapidShotT > 0) return;
+
+    const spread = this.rapidShotsLeft % 2 === 0 ? -0.15 : 0.15;
+    this.projectiles.push({
+      x: this.weaponTipX(), y: this.weaponY(), vx: 19, vy: spread,
+      life: 1.7, dmg: this.rapidDmg * this.rng.range(0.92, 1.08), color: this.rapidColor,
+      fromPlayer: true, symbol: ">", pierce: 2,
+    });
+    this.burst(this.weaponTipX(), this.weaponY(), this.rapidColor, 2);
+    this.rapidShotsLeft -= 1;
+    this.rapidShotT = 0.13;
   }
 
   useSkill(index: number) {
@@ -867,11 +919,15 @@ export class Game {
         break;
       }
       case "projectile": {
+        if (id === "rapid_fire") {
+          this.startRapidFire(baseMult, cls.color);
+          break;
+        }
         const sym = def.symbol[0] ?? ">";
         const n = id === "multi_shot" ? 3 : 1;
         for (let i = 0; i < n; i++) {
           this.projectiles.push({
-            x: this.worldCol + 5, y: this.weaponY(), vx: 17, vy: n > 1 ? (i - 1) * 0.8 : 0,
+            x: this.weaponTipX(), y: this.weaponY(), vx: 17, vy: n > 1 ? (i - 1) * 0.8 : 0,
             life: 1.6, dmg: this.playerAtkValue(baseMult, true).dmg, color: cls.color,
             fromPlayer: true, symbol: sym, pierce: 99, aoe: def.radius,
           });
@@ -1191,15 +1247,23 @@ export class Game {
     if (this.onGround && (this.world.isChasm(ahead) || this.spikes.some((s) => s.x <= ahead + 1 && s.x + s.w >= ahead))) {
       this.jump();
     }
-    // auto-use a ready skill when enemy near
+    // auto-use ready skills for all classes starting from index 0
     if (this.autoCd <= 0) {
-      this.autoCd = 0.6;
+      this.autoCd = 0.5;
       const cls = CLASSES[this.profile.classId];
-      for (let i = 1; i < cls.skills.length; i++) {
+      for (let i = 0; i < cls.skills.length; i++) {
         const id = cls.skills[i];
-        if ((this.skillCd[id] ?? 0) <= 0 && this.mp >= (SKILLS[id].mana)) {
-          const tgt = this.findTarget(8);
-          if (tgt) { this.useSkill(i); break; }
+        const def = SKILLS[id];
+        if (!def) continue;
+        const lvl = this.profile.skills[id] ?? 0;
+        // skill 0 is always available; higher index skills require training (lvl > 0) or ultimate check
+        if ((i === 0 || lvl > 0) && (this.skillCd[id] ?? 0) <= 0 && this.mp >= def.mana) {
+          const range = def.range ?? (def.radius ? def.radius + 4 : 22);
+          const tgt = this.findTarget(range);
+          if (tgt) {
+            this.useSkill(i);
+            break;
+          }
         }
       }
     }
