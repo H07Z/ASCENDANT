@@ -387,7 +387,7 @@ export function SummonAnimation({
         {phase !== "reveal" && (
           <div>
             <pre
-              className="mx-auto inline-block text-left text-[13px] leading-tight sm:text-lg"
+              className="mx-auto block w-fit text-[10px] leading-none sm:text-[13px] sm:leading-tight md:text-lg"
               style={{
                 color: phase === "burst" ? "#ffffff" : bestColor,
                 textShadow: `0 0 ${phase === "burst" ? 30 : 10 + bestIdx * 4}px ${bestColor}`,
@@ -417,7 +417,11 @@ export function SummonAnimation({
             >
               {flair.shout}
             </div>
-            <div className="flex flex-wrap items-stretch justify-center gap-2">
+            <div
+              className={`mx-auto flex flex-wrap justify-center gap-2 ${
+                results.length === 1 ? "items-center" : "max-w-4xl"
+              }`}
+            >
               {results.slice(0, shown).map((r, i) => {
                 const def = PETS[r.petId];
                 const rc = rarityColor(r.rarity);
@@ -425,18 +429,16 @@ export function SummonAnimation({
                 return (
                   <div
                     key={i}
-                    className="border bg-black/70 p-2"
+                    className="flex min-w-[140px] flex-col items-center justify-center border bg-black/70 p-2 text-center"
                     style={{
                       borderColor: rc,
                       boxShadow: hi ? `0 0 22px ${rc}88` : `0 0 8px ${rc}44`,
                       animation: "popIn 260ms ease-out",
                     }}
                   >
-                    <div className="flex justify-center">
-                      <pre className="inline-block text-left text-[8px] leading-none" style={{ color: def.color }}>
-                        {def.art.join("\n")}
-                      </pre>
-                    </div>
+                    <pre className="text-[8px] leading-none" style={{ color: def.color }}>
+                      {def.art.join("\n")}
+                    </pre>
                     <div className="mt-1 text-[10px] glow" style={{ color: rc }}>
                       {def.name}
                     </div>
