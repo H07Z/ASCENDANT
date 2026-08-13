@@ -315,6 +315,7 @@ export function newProfile(name: string, classId: string): Profile {
     activePet: null,
     petShards: 0,
     spiritOrbs: 60,
+    diamonds: 0,
     petPity: 0,
     petPulls: 0,
     bestDistance: 0,

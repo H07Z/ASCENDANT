@@ -881,6 +881,7 @@ export function CurrencyPanel({ profile, onClose }: { profile: Profile; onClose:
     { icon: "$", name: "Gold", value: profile.gold, use: "Gear, enhancement and skill training", color: "#ffd24b" },
     { icon: "◆", name: "Crystals", value: profile.crystals, use: "Skill upgrades and advanced enhancement", color: "#d58cff" },
     { icon: "❂", name: "Spirit Orbs", value: profile.spiritOrbs ?? 0, use: "Pet summoning at the Companion Sanctum", color: "#ffa14b" },
+    { icon: "✦", name: "Diamonds", value: profile.diamonds ?? 0, use: "Continue on the spot after falling — rare boss drop", color: "#8be9ff" },
     { icon: "✦", name: "Boss Tokens", value: profile.tokens, use: "Rare boss equipment and future exchanges", color: "#ff7d52" },
     { icon: "✧", name: "Pet Shards", value: profile.petShards ?? 0, use: "Raise companion star levels", color: "#76dfff" },
     { icon: "+", name: "Stat Points", value: profile.statPoints, use: "Permanent character development", color: "#80e39b" },
@@ -944,12 +945,14 @@ export function GuidePanel({ onClose }: { onClose: () => void }) {
     combat: [
       { title: "BASIC COMBAT", lines: ["Basic attacks trigger automatically when a target enters range.", "Manual skills deal more damage and improve survival.", "The TARGET panel shows enemy rarity, level and animated health."] },
       { title: "SURVIVAL", lines: ["Dash during boss warnings to avoid incoming damage.", "Jumping clears ground hazards but not every boss attack.", "Use a potion below 40% HP; its cooldown is shown on the control bar."] },
+      { title: "MONSTER BEHAVIOUR", lines: ["Monsters chase you whenever you leave their attack range.", "From 5,000m they gain LUNGE; 15,000m adds VOLLEY.", "30,000m adds BURST and low-HP ENRAGE; 50,000m unlocks the full kit.", "Elites are always one skill tier ahead of normal foes.", "Watch for the '!' telegraph and dash away before it lands."] },
+      { title: "WHEN YOU FALL", lines: ["By default your run restarts from the very beginning.", "Spend 1 Diamond ✦ to continue right where you fell.", "Diamonds only drop from bosses and are rare.", "Levels, gear, pets and currency are never lost on death."] },
       { title: "BOSSES", lines: ["Gold-bordered health bars identify bosses.", "SLAM threatens nearby heroes; WAVE fires projectiles.", "RAIN targets your position; CHARGE closes distance quickly."] },
     ],
     progress: [
       { title: "EQUIPMENT", lines: ["Gear drops in seven rarities from COMMON to ANCIENT.", "Equip stronger items from the Bag panel.", "Use the town Blacksmith to enhance equipped gear with gold."] },
       { title: "SKILLS & STATS", lines: ["Spend Gold and Crystals to level class skills.", "Crystals are for skills only and are never spent on pets.", "Leveling increases class stats and grants stat points."] },
-      { title: "CURRENCIES", lines: ["Gold: gear, enhancement and skill training.", "Crystals ◆: class skill upgrades and enhancement.", "Spirit Orbs ❂: pet summoning only.", "Pet Shards ✧: raising companion star levels.", "Boss Tokens ✦: rare boss equipment."] },
+      { title: "CURRENCIES", lines: ["Gold: gear, enhancement and skill training.", "Crystals ◆: class skill upgrades and enhancement.", "Spirit Orbs ❂: pet summoning only.", "Pet Shards ✧: raising companion star levels.", "Boss Tokens ✦: rare boss equipment.", "Diamonds ✦: continue after death — rare boss drop only."] },
       { title: "ECONOMY", lines: ["Open Wallet to inspect every currency and material.", "Sell unwanted gear from the Bag for gold.", "Skill and pet economies are fully separate."] },
     ],
     pets: [
@@ -991,14 +994,21 @@ export function GuidePanel({ onClose }: { onClose: () => void }) {
 export function DeathPanel({
   run,
   best,
+  diamonds,
+  reviveCost,
+  onContinue,
   onRevive,
   onTown,
 }: {
   run: { distance: number; kills: number; bosses: number; goldEarned: number; maxCombo: number };
   best: number;
+  diamonds: number;
+  reviveCost: number;
+  onContinue: () => void;
   onRevive: () => void;
   onTown: () => void;
 }) {
+  const canContinue = diamonds >= reviveCost;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-red-950/80 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md border border-red-700/50 bg-black/90 p-6 text-center" style={{ boxShadow: "0 0 60px #ff000022" }}>
@@ -1019,9 +1029,30 @@ export function DeathPanel({
           <Row label="Gold Earned" value={run.goldEarned.toLocaleString()} />
           <Row label="Best Distance Ever" value={`${best.toLocaleString()}m`} highlight />
         </div>
-        <div className="mt-5 flex justify-center gap-3">
+        {/* diamond continue — resume exactly where you fell */}
+        <div className="mt-4 border border-cyan-500/30 bg-cyan-500/5 p-3">
+          <div className="text-[11px] tracking-wider text-cyan-300">✦ CONTINUE HERE</div>
+          <div className="mt-1 text-[10px] text-slate-400">
+            Spend a diamond to revive on the spot and keep your distance.
+          </div>
+          <div className="mt-2 flex items-center justify-center gap-2">
+            <Btn color="#8be9ff" disabled={!canContinue} onClick={onContinue}>
+              ✦ continue · {reviveCost} diamond
+            </Btn>
+            <span className={`text-[10px] ${canContinue ? "text-cyan-300" : "text-rose-400"}`}>
+              you have {diamonds} ✦
+            </span>
+          </div>
+          {!canContinue && (
+            <div className="mt-1 text-[10px] text-rose-400/80">
+              Diamonds drop rarely from bosses.
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 flex justify-center gap-3">
           <Btn color="#5fd17a" onClick={onRevive}>
-            ↻ revive (continue)
+            ↻ restart from the beginning
           </Btn>
           <Btn color="#ffd24b" onClick={onTown}>
             ⌂ return to town

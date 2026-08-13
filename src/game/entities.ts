@@ -52,12 +52,21 @@ export interface Enemy {
   kb: number; // knockback velocity
   dead: boolean;
   anim: number;
+  // ---- monster skill system (unlocks with difficulty) ----
+  skillTier: number; // 0 = none, 1..4 = progressively stronger kits
+  skillCd: number; // seconds until next special
+  skillWindup: number; // >0 while telegraphing
+  skillKind: "none" | "lunge" | "volley" | "burst" | "enrage";
+  enraged: boolean;
+  fromLeft: boolean; // rare cavalry ambush from behind the hero
 }
 
-export function makeEnemy(spawn: { x: number; enemyId: string; elite: boolean; level: number }, world: World): Enemy {
+export function makeEnemy(spawn: { x: number; enemyId: string; elite: boolean; level: number; fromLeft?: boolean }, world: World): Enemy {
   const d = ENEMIES[spawn.enemyId];
-  const diff = world.difficulty(world.dist(spawn.x));
+  const diff = world.difficulty(world.dist(Math.max(0, spawn.x)));
   const eliteMul = spawn.elite ? 2.6 : 1;
+  const dist = world.dist(Math.max(0, spawn.x));
+  const goldScale = 1 + dist / 8000; // slow gold growth with distance
   return {
     kind: "enemy",
     x: spawn.x,
@@ -69,7 +78,7 @@ export function makeEnemy(spawn: { x: number; enemyId: string; elite: boolean; l
     atk: Math.round(d.atk * diff.atk * (1 + spawn.level * 0.1) * (spawn.elite ? 1.5 : 1)),
     def: Math.round(d.def * (1 + spawn.level * 0.08)),
     xp: Math.round(d.xp * diff.xp * (spawn.elite ? 4 : 1)),
-    gold: Math.round(d.gold * diff.gold * (spawn.elite ? 5 : 1)),
+    gold: Math.max(1, Math.round(d.gold * goldScale * (spawn.elite ? 2.2 : 1))),
     elite: spawn.elite,
     level: spawn.level,
     ai: d.ai,
@@ -83,7 +92,100 @@ export function makeEnemy(spawn: { x: number; enemyId: string; elite: boolean; l
     kb: 0,
     dead: false,
     anim: Math.random() * 10,
+    // Monster skills unlock progressively with world difficulty.
+    skillTier: monsterSkillTier(world.dist(spawn.x), spawn.elite),
+    skillCd: 3 + Math.random() * 3,
+    skillWindup: 0,
+    skillKind: "none",
+    enraged: false,
+    fromLeft: !!spawn.fromLeft || d.ai === "cavalry",
   };
+}
+
+/**
+ * Monsters gain a deeper skill kit the further the player travels.
+ * 0 = plain attacks, 4 = full kit (lunge, volley, burst, enrage).
+ */
+export function monsterSkillTier(dist: number, elite: boolean): number {
+  let tier = 0;
+  if (dist >= 5000) tier = 1;
+  if (dist >= 15000) tier = 2;
+  if (dist >= 30000) tier = 3;
+  if (dist >= 50000) tier = 4;
+  if (elite) tier = Math.min(4, tier + 1); // elites are always a step ahead
+  return tier;
+}
+
+/**
+ * Monster special-attack driver. Higher skillTier unlocks more options and
+ * shortens cooldowns, so late-game foes fight far more aggressively.
+ */
+function updateEnemySkill(e: Enemy, ctx: CombatCtx, dist: number, rageMul: number) {
+  const { dt } = ctx;
+
+  // resolve an in-progress telegraph
+  if (e.skillWindup > 0) {
+    e.skillWindup -= dt;
+    if (e.skillWindup > 0) {
+      ctx.floatText(e.x, e.feetRow - e.size[1] - 1, "!", "#ff5d5d");
+      return;
+    }
+    fireEnemySkill(e, ctx, dist);
+    return;
+  }
+
+  e.skillCd -= dt * rageMul;
+  if (e.skillCd > 0) return;
+  if (Math.abs(dist) > 18) return; // only act when the hero is nearby
+
+  // pick a skill from the unlocked pool
+  const pool: Enemy["skillKind"][] = ["lunge"];
+  if (e.skillTier >= 2) pool.push("volley");
+  if (e.skillTier >= 3) pool.push("burst");
+  if (e.skillTier >= 4) pool.push("enrage");
+  const kind = ctx.rng.pick(pool);
+
+  e.skillKind = kind;
+  e.skillWindup = kind === "burst" ? 0.7 : 0.45; // telegraph window
+  // stronger tiers act more often
+  e.skillCd = Math.max(2.2, 7 - e.skillTier * 0.9) + ctx.rng.range(0, 2);
+  ctx.floatText(e.x, e.feetRow - e.size[1] - 2, kind.toUpperCase(), "#ffd24b");
+}
+
+function fireEnemySkill(e: Enemy, ctx: CombatCtx, dist: number) {
+  const kind = e.skillKind;
+  e.skillKind = "none";
+  const originY = e.feetRow - Math.max(1, Math.floor(e.size[1] / 2));
+  const dir = dist >= 0 ? 1 : -1;
+
+  if (kind === "lunge") {
+    // dash at the hero and strike on contact
+    e.kb = dir * 9;
+    if (Math.abs(dist) < 6) {
+      ctx.hurtPlayer(e.atk * 1.4, e.name);
+      ctx.burst(e.x, originY, e.color, 8);
+    }
+  } else if (kind === "volley") {
+    // three-round spread aimed at the hero
+    for (let i = -1; i <= 1; i++) {
+      ctx.spawnProj({
+        x: e.x + dir * 1.5, y: originY, vx: dir * 8, vy: i * 1.1,
+        life: 3, dmg: e.atk * 0.8, color: e.color, fromPlayer: false, symbol: "◆",
+      });
+    }
+    ctx.burst(e.x, originY, e.color, 6);
+  } else if (kind === "burst") {
+    // heavy shockwave around the monster
+    ctx.shake(6);
+    ctx.burst(e.x, originY, "#ff8a4a", 14);
+    if (Math.abs(dist) < 7) ctx.hurtPlayer(e.atk * 1.7, e.name);
+  } else if (kind === "enrage") {
+    // self-buff: heal a little and speed up permanently
+    e.enraged = true;
+    e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.12);
+    ctx.floatText(e.x, e.feetRow - e.size[1] - 1, "EMPOWERED!", "#ff5d5d");
+    ctx.burst(e.x, originY, "#ff5d5d", 10);
+  }
 }
 
 export function enemyFrames(e: Enemy): string[] {
@@ -109,20 +211,47 @@ export function updateEnemy(e: Enemy, ctx: CombatCtx) {
   const target = ctx.player.col;
   const dist = target - e.x;
 
-  // ground followers
+  // Enraged monsters (low HP, high tier) move and strike faster.
+  if (!e.enraged && e.skillTier >= 3 && e.hp / e.maxHp < 0.35) {
+    e.enraged = true;
+    ctx.floatText(e.x, e.feetRow - e.size[1] - 1, "ENRAGED!", "#ff5d5d");
+  }
+  const rageMul = e.enraged ? 1.5 : 1;
+
+  // Melee reach: beyond this the monster must close the gap.
+  const MELEE_REACH = 2.2;
+  // Ranged monsters still want to be within firing distance.
+  const FIRE_REACH = 15;
+
+  // ground followers — always pursue the hero when out of attack range
   if (e.ai === "walker" || e.ai === "charger") {
-    const speed = e.ai === "charger" ? 3.4 : 1.7;
-    // enemies hold a visible gap in front of the hero instead of overlapping
-    if (dist > 2.2) e.x += Math.min(speed * dt, dist - 2.2);
+    const speed = (e.ai === "charger" ? 3.4 : 1.7) * rageMul;
+    if (e.ranged) {
+      // ranged ground units close in until they can fire, then hold position
+      if (dist > FIRE_REACH) e.x += Math.min(speed * dt, dist - FIRE_REACH);
+      else if (dist < 4 && dist > -4) e.x -= speed * 0.6 * dt; // kite backwards
+    } else if (dist > MELEE_REACH) {
+      // out of melee range: walk toward the hero
+      e.x += Math.min(speed * dt, dist - MELEE_REACH);
+    } else if (dist < -MELEE_REACH) {
+      // hero slipped behind: turn around and pursue
+      e.x -= Math.min(speed * dt, Math.abs(dist) - MELEE_REACH);
+    }
     e.feetRow = ctx.groundAt(Math.round(e.x)) - 1;
   } else if (e.ai === "flyer") {
-    const speed = 2.0;
-    if (dist > 4) e.x += speed * dt;
+    const speed = 2.6 * rageMul;
+    const want = e.ranged ? 10 : MELEE_REACH;
+    if (dist > want) e.x += Math.min(speed * dt, dist - want);
+    else if (dist < -want) e.x -= Math.min(speed * dt, Math.abs(dist) - want);
     e.feetRow = ctx.groundAt(Math.round(e.x)) - 3.5 - Math.sin(ctx.t * 2 + e.anim) * 0.5;
   } else {
-    // turret: stationary
+    // turret: rooted, but higher tiers can shuffle slightly toward the hero
+    if (e.skillTier >= 2 && Math.abs(dist) > 12) e.x += Math.sign(dist) * 0.6 * dt;
     e.feetRow = ctx.groundAt(Math.round(e.x)) - 2;
   }
+
+  // ---- monster special skills -----------------------------
+  if (e.skillTier > 0) updateEnemySkill(e, ctx, dist, rageMul);
 
   // attack
   const sameHeight = Math.abs(e.feetRow - ctx.player.feetRow) <= 5.5;
@@ -148,9 +277,9 @@ export function updateEnemy(e: Enemy, ctx: CombatCtx) {
         symbol: "●",
       });
     }
-  } else if (sameHeight && Math.abs(dist) < 5.4 && e.cd <= 0 && !ctx.player.invuln) {
-    e.cd = e.ai === "charger" ? 1.6 : 1.2;
-    ctx.hurtPlayer(e.atk, e.name);
+  } else if (sameHeight && Math.abs(dist) < (e.ai === "cavalry" ? 3.2 : 5.4) && e.cd <= 0 && !ctx.player.invuln) {
+    e.cd = e.ai === "cavalry" ? 0.55 : e.ai === "charger" ? 1.6 : 1.2;
+    ctx.hurtPlayer(e.atk * (e.ai === "cavalry" ? 1.15 : 1), e.name);
     ctx.burst(e.x, e.feetRow - 1, "#ff6a4a", 4);
   }
 }
@@ -403,7 +532,7 @@ export interface FloatText {
 
 // ----------------------------------------------------------
 export interface Pickup {
-  kind: "loot" | "chest";
+  kind: "loot" | "chest" | "coin";
   x: number;
   row: number;
   bob: number;
@@ -411,6 +540,13 @@ export interface Pickup {
   tier?: number;
   opened?: boolean;
   dead?: boolean;
+  // ---- physics for coins that splash out of a slain monster ----
+  vx?: number;
+  vy?: number;
+  height?: number; // rows above the ground line
+  landed?: boolean;
+  life?: number; // despawn timer once landed
+  magnet?: boolean; // drifts toward the hero when close
 }
 
 export interface Spike {

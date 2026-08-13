@@ -233,7 +233,8 @@ export class World {
   }
 
   rollLoot(dist: number, regionIdx: number, boss: boolean): LootPayload {
-    const g = Math.round((8 + dist * 0.4) * (boss ? 12 : 1) * this.rng.range(0.8, 1.3));
+    // Slow gold curve: tiny early, climbs gradually with distance.
+    const g = Math.round((2 + dist * 0.012 + regionIdx * 2) * (boss ? 8 : 1) * this.rng.range(0.85, 1.15));
     const pay: LootPayload = { gold: g };
     if (boss || this.rng.chance(0.12)) pay.crystals = this.rng.int(1, boss ? 8 : 3);
     if (this.rng.chance(0.5)) {

@@ -176,7 +176,7 @@ export interface ClassDef {
 }
 
 // ---- Enemies / Bosses --------------------------------------
-export type AIType = "walker" | "charger" | "flyer" | "turret";
+export type AIType = "walker" | "charger" | "flyer" | "turret" | "cavalry";
 
 export interface EnemyDef {
   id: string;
@@ -301,6 +301,7 @@ export interface Profile {
   activePet: string | null;
   petShards: number;
   spiritOrbs: number;
+  diamonds: number; // rare boss-only currency, used to continue after death
   petPity: number;
   petPulls: number;
   bestDistance: number;

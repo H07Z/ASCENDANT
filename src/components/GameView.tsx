@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Game, type HudSnapshot } from "../game/engine";
+import { DIAMOND_REVIVE_COST, Game, type HudSnapshot } from "../game/engine";
 import { CLASSES, PETS, PET_MAX_STAR, PET_PULL10_COST, PET_PULL_COST, SKILLS } from "../game/content";
 import { type PullResult, generateItem, pullPetMany, starUpCost } from "../game/profile";
 import { RNG } from "../game/rng";
@@ -363,8 +363,17 @@ export default function GameView({
         <DeathPanel
           run={death}
           best={profile.bestDistance}
+          diamonds={profile.diamonds ?? 0}
+          reviveCost={DIAMOND_REVIVE_COST}
+          onContinue={() => {
+            if (g().continueWithDiamond()) {
+              persist();
+              setDeath(null);
+              bump((n) => n + 1);
+            }
+          }}
           onRevive={() => {
-            g().revive();
+            g().reviveAtStart();
             setDeath(null);
           }}
           onTown={() => {
