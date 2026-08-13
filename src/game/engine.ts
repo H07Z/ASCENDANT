@@ -152,16 +152,18 @@ export class Game {
   animT = 0;
   attackTimer = 0;
   castTimer = 0;
-  // Warrior Cleave leap-attack state machine
-  leapPhase: "none" | "wind" | "air" | "recover" = "none";
-  leapT = 0;
-  leapStartX = 0;
-  leapTargetX = 0;
-  leapPeak = 0;
-  leapDmg = 0;
-  leapRadius = 4;
-  leapCrit = false;
-  leapColor = "#ff8a4a";
+  // Unified Skill-Motion System (Leap, Dash, Blink, Backflip)
+  motionType: "none" | "leap" | "dash" | "blink" | "backflip" = "none";
+  motionPhase: "none" | "wind" | "move" | "recover" = "none";
+  motionT = 0;
+  motionStartX = 0;
+  motionTargetX = 0;
+  motionPeak = 0;
+  motionDmg = 0;
+  motionRadius = 4;
+  motionCrit = false;
+  motionColor = "#ff8a4a";
+  motionSymbol = "###";
   hurtT = 0;
   invuln = 0;
   dashT = 0;
@@ -327,82 +329,127 @@ export class Game {
     return this.worldCol + 2 + Math.max(1, glyph.length - 1);
   }
 
-  // ---- Warrior Cleave: recoil, leap, slam ------------------
-  private startWarriorLeap(mult: number, radius: number) {
-    const tgt = this.findTarget(20) ?? null;
+  // ---- Unified Skill-Motion State Machine ------------------
+  private startSkillMotion(
+    type: "leap" | "dash" | "blink" | "backflip",
+    mult: number,
+    radius: number,
+    symbol: string,
+    color: string,
+    skillName: string
+  ) {
+    const tgt = this.findTarget(24) ?? null;
     const targetX = tgt ? tgt.x : this.worldCol + 6;
-    const gap = Math.max(3, targetX - this.worldCol); // distance to enemy
-    this.leapPhase = "wind";
-    this.leapT = 0;
-    this.leapStartX = this.worldCol;
-    this.leapTargetX = targetX;
-    // higher jump for farther enemies, capped so it stays on-screen
-    this.leapPeak = Math.min(9, 3 + gap * 0.45);
+    const gap = Math.max(3, targetX - this.worldCol);
+
+    this.motionType = type;
+    this.motionPhase = "wind";
+    this.motionT = 0;
+    this.motionStartX = this.worldCol;
+    this.motionTargetX = targetX;
+    this.motionPeak = type === "leap" ? Math.min(9, 3 + gap * 0.45) : type === "backflip" ? 5 : 0;
+    
     const v = this.playerAtkValue(mult, true);
-    this.leapDmg = v.dmg;
-    this.leapCrit = v.crit;
-    this.leapRadius = radius + 1;
-    this.leapColor = "#ff8a4a";
+    this.motionDmg = v.dmg;
+    this.motionCrit = v.crit;
+    this.motionRadius = radius;
+    this.motionColor = color;
+    this.motionSymbol = symbol;
+
     this.castTimer = 0.4;
-    this.invuln = Math.max(this.invuln, 0.15);
-    this.headText("CLEAVE!", "#ff8a4a");
+    this.invuln = Math.max(this.invuln, 0.4);
+    this.headText(skillName.toUpperCase() + "!", color);
   }
 
-  private updateLeap(dt: number) {
-    this.leapT += dt;
-    const gap = Math.max(1, Math.abs(this.leapTargetX - this.leapStartX));
-    // Phase 1: wind-up recoil — hero steps back for 0.18s
-    if (this.leapPhase === "wind") {
-      const recoil = 2.4;
-      const p = Math.min(1, this.leapT / 0.18);
-      this.worldCol = this.leapStartX - recoil * p;
-      if (this.leapT >= 0.18) {
-        this.leapPhase = "air";
-        this.leapT = 0;
+  private updateSkillMotion(dt: number) {
+    this.motionT += dt;
+    const gap = Math.max(1, Math.abs(this.motionTargetX - this.motionStartX));
+
+    // Phase 1: Wind-up / Recoil (Wind is 0.16s)
+    if (this.motionPhase === "wind") {
+      const recoil = this.motionType === "leap" ? 2.4 : this.motionType === "backflip" ? 3.0 : 0.6;
+      const p = Math.min(1, this.motionT / 0.16);
+      this.worldCol = this.motionStartX - recoil * p;
+      if (this.motionT >= 0.16) {
+        this.motionPhase = "move";
+        this.motionT = 0;
         this.vy = 0;
-        this.onGround = false;
-        this.height = 0.01;
+        if (this.motionType === "leap" || this.motionType === "backflip") {
+          this.onGround = false;
+          this.height = 0.01;
+        }
       }
       return;
     }
-    // Phase 2: parabolic jump onto the target
-    if (this.leapPhase === "air") {
-      const airTime = Math.min(0.9, 0.32 + gap * 0.045);
-      const p = Math.min(1, this.leapT / airTime);
-      // horizontal ease from -recoil to target
-      this.worldCol = this.leapStartX - 2.4 + (this.leapTargetX - (this.leapStartX - 2.4)) * p;
-      // parabola: sin(π·p) gives 0→1→0 with a peak in the middle
-      this.height = Math.sin(Math.PI * p) * this.leapPeak;
-      this.vy = p < 0.5 ? 6 : -6;
-      this.onGround = false;
+
+    // Phase 2: Core Movement Execution
+    if (this.motionPhase === "move") {
+      let duration = 0.35;
+      if (this.motionType === "leap") duration = Math.min(0.9, 0.30 + gap * 0.045);
+      else if (this.motionType === "dash") duration = 0.22;
+      else if (this.motionType === "blink") duration = 0.08; // extremely rapid teleport
+      else if (this.motionType === "backflip") duration = 0.45;
+
+      const p = Math.min(1, this.motionT / duration);
+
+      if (this.motionType === "leap") {
+        // High parabolic jump forward onto target
+        this.worldCol = this.motionStartX - 2.4 + (this.motionTargetX - (this.motionStartX - 2.4)) * p;
+        this.height = Math.sin(Math.PI * p) * this.motionPeak;
+        this.onGround = false;
+      } else if (this.motionType === "dash") {
+        // Flat, lightning-fast forward dash
+        this.worldCol = this.motionStartX - 0.6 + (this.motionTargetX - (this.motionStartX - 0.6)) * p;
+        this.height = 0;
+        this.onGround = true;
+      } else if (this.motionType === "blink") {
+        // Immediate teleportation right behind target
+        this.worldCol = this.motionTargetX + 1.2;
+        this.height = 0;
+        this.onGround = true;
+      } else if (this.motionType === "backflip") {
+        // High back-flip lunge away from the threat
+        this.worldCol = this.motionStartX - 3.0 - (5.0 * p);
+        this.height = Math.sin(Math.PI * p) * this.motionPeak;
+        this.onGround = false;
+      }
+
       if (p >= 1) {
-        // slam-down impact
+        // Execute the skill impact!
         this.height = 0;
         this.vy = 0;
         this.onGround = true;
-        this.worldCol = this.leapTargetX;
-        this.aoeBlast(this.worldCol, this.leapRadius, 0, "###", true);
-        // deliver stored damage in a wide arc
+        
+        const impactX = this.motionType === "backflip" ? this.worldCol + 5 : this.worldCol;
+        this.aoeBlast(impactX, this.motionRadius, 0, this.motionSymbol, true);
+
+        // Deliver computed damage to enemies in area
         for (const e of this.enemies) {
           if (e.dead) continue;
-          if (Math.abs(e.x - this.worldCol) <= this.leapRadius && Math.abs(e.feetRow - this.playerFeetRow) <= 5) {
-            this.dealDamage(e, this.leapDmg, this.leapCrit, this.leapColor);
+          if (Math.abs(e.x - impactX) <= this.motionRadius && Math.abs(e.feetRow - this.playerFeetRow) <= 6) {
+            this.dealDamage(e, this.motionDmg, this.motionCrit, this.motionColor);
           }
         }
-        if (this.boss && !this.boss.dead && Math.abs(this.boss.x - this.worldCol) <= this.leapRadius + 2) {
-          this.dealDamage(this.boss, this.leapDmg, this.leapCrit, this.leapColor);
+        if (this.boss && !this.boss.dead && Math.abs(this.boss.x - impactX) <= this.motionRadius + 2) {
+          this.dealDamage(this.boss, this.motionDmg, this.motionCrit, this.motionColor);
         }
-        this.shake(9);
-        this.flash = Math.min(1, this.flash + 0.35);
-        this.leapPhase = "recover";
-        this.leapT = 0;
-        this.attackTimer = 0.25;
+
+        this.shake(this.motionType === "blink" ? 4 : 8);
+        this.flash = Math.min(1, this.flash + (this.motionType === "leap" ? 0.35 : 0.20));
+        this.motionPhase = "recover";
+        this.motionT = 0;
+        this.attackTimer = 0.22;
       }
       return;
     }
-    // Phase 3: brief recovery so the strike reads clearly
-    if (this.leapPhase === "recover") {
-      if (this.leapT >= 0.18) this.leapPhase = "none";
+
+    // Phase 3: Brief recovery
+    if (this.motionPhase === "recover") {
+      const recTime = this.motionType === "blink" ? 0.08 : 0.16;
+      if (this.motionT >= recTime) {
+        this.motionPhase = "none";
+        this.motionType = "none";
+      }
       return;
     }
   }
@@ -442,8 +489,8 @@ export class Game {
     // Ranger/Gunner Rapid Fire locks the hero in place while the burst resolves.
     if (this.rapidLockT > 0) { this.updateRapidFire(dt); speed = 0; }
 
-    // Warrior Cleave leap sequence (wind → air → recover) drives movement itself
-    if (this.leapPhase !== "none") { this.updateLeap(dt); speed = 0; }
+    // Dynamic skill motions (Leap, Dash, Blink, Backflip) take full control of movement
+    if (this.motionPhase !== "none") { this.updateSkillMotion(dt); speed = 0; }
 
     // combat priority: stop completely in front of the enemy so we can fight 1v1 in proper range!
     const isRanged = ["ranger", "mage", "gunner"].includes(this.profile.classId);
@@ -898,10 +945,13 @@ export class Game {
 
     switch (def.kind) {
       case "strike": {
+        if (id === "backstab") {
+          this.startSkillMotion("blink", baseMult, def.radius ?? 3, def.symbol, "#a98bff", "Backstab");
+          break;
+        }
         const tgt = this.findTarget(Math.max(def.range ?? 3, 6.2));
         if (tgt) {
           const v = this.playerAtkValue(baseMult, true);
-          if (id === "backstab" && this.rng.chance(0.5)) v.crit = true;
           this.dealDamage(tgt, v.dmg, v.crit, "#ff8a4a");
           this.burst(tgt.x, 0, "#ff8a4a", 8);
         }
@@ -910,9 +960,10 @@ export class Game {
       case "cleave":
       case "aoe": {
         const r = def.radius ?? 4;
-        // Warriors perform a scripted leap-attack for Cleave.
-        if (def.kind === "cleave" && this.profile.classId === "warrior") {
-          this.startWarriorLeap(baseMult, r);
+        if (id === "cleave" && this.profile.classId === "warrior") {
+          this.startSkillMotion("leap", baseMult, r, def.symbol, "#ff8a4a", "Cleave");
+        } else if (id === "dissonant_chord") {
+          this.aoeBlast(this.worldCol, r, baseMult, def.symbol, true);
         } else {
           this.aoeBlast(this.worldCol, r, baseMult, def.symbol, def.kind === "aoe");
         }
@@ -935,6 +986,10 @@ export class Game {
         break;
       }
       case "dash": {
+        if (id === "shadow_dash") {
+          this.startSkillMotion("dash", baseMult, def.range ?? 6, def.symbol, "#a98bff", "Shadow Dash");
+          break;
+        }
         this.dashT = DASH_TIME;
         this.invuln = Math.max(this.invuln, 0.3);
         this.aoeBlast(this.worldCol + 4, def.range ?? 6, baseMult, def.symbol, true);
@@ -945,18 +1000,45 @@ export class Game {
         const heal = Math.round(this.maxHp * 0.35);
         this.hp = Math.min(this.maxHp, this.hp + heal);
         this.dmgNum(this.worldCol, this.playerFeetRow - 3, heal, false, "#5fd17a");
-        this.headText("+HEAL", "#5fd17a");
+        
+        if (id === "hymn_of_serenity") {
+          const mpRegen = Math.round(this.maxMp * 0.20);
+          this.mp = Math.min(this.maxMp, this.mp + mpRegen);
+          this.headText("+HEAL & +MP", "#5fd17a");
+          this.burst(this.worldCol, this.playerFeetRow - 2, "#49b6ff", 4);
+        } else {
+          this.headText("+HEAL", "#5fd17a");
+        }
         break;
       }
       case "buff": {
-        this.buffTimer = id === "blood_rage" ? 8 : 10;
-        this.buffAtk = id === "blood_rage" ? 1.7 : 1.35;
-        this.buffCrit = id === "blood_rage" ? 20 : 0;
-        this.headText(id === "blood_rage" ? "BLOOD RAGE!" : "WAR CRY!", "#ff5d5d");
+        if (id === "symphony_of_might") {
+          this.buffTimer = 10;
+          this.buffAtk = 1.40;
+          this.buffCrit = 15;
+          this.headText("MIGHT SYMPHONY!", "#ff6fb0");
+        } else {
+          this.buffTimer = id === "blood_rage" ? 8 : 10;
+          this.buffAtk = id === "blood_rage" ? 1.7 : 1.35;
+          this.buffCrit = id === "blood_rage" ? 20 : 0;
+          this.headText(id === "blood_rage" ? "BLOOD RAGE!" : "WAR CRY!", "#ff5d5d");
+        }
         this.flash = 0.3;
         break;
       }
       case "ultimate": {
+        if (id === "fortress_break") {
+          this.startSkillMotion("leap", baseMult, def.radius ?? 7, def.symbol, "#5fd0ff", def.name);
+          break;
+        }
+        if (id === "arrow_storm") {
+          this.startSkillMotion("backflip", baseMult, def.radius ?? 8, def.symbol, "#5fd17a", def.name);
+          break;
+        }
+        if (id === "calamity_requiem") {
+          this.startSkillMotion("backflip", baseMult, def.radius ?? 9, def.symbol, "#ff6fb0", def.name);
+          break;
+        }
         this.flash = 0.8;
         this.shake(14);
         this.aoeBlast(this.worldCol + 3, def.radius ?? 7, baseMult, def.symbol, true);
@@ -1091,7 +1173,7 @@ export class Game {
     // drops
     const dropR = this.rng.next();
     if (e.elite || dropR < 0.12) {
-      const it = generateItem(this.rng, this.rng.pick(SLOT_ORDER), Math.max(1, Math.round(this.worldCol / 60)), this.run.regionIdx, e.elite ? "RARE" : undefined);
+      const it = generateItem(this.rng, this.rng.pick(SLOT_ORDER), Math.max(1, Math.round(this.worldCol / 60)), this.run.regionIdx, e.elite ? "RARE" : undefined, this.profile.classId);
       this.cb.onLoot?.(it);
       this.headText(`[${it.rarity}] ${it.name}`, RARITY_COLOR[it.rarity]);
     }
@@ -1129,7 +1211,7 @@ export class Game {
     this.addExp(b.xp);
     this.floatText(b.x, b.feetRow - b.size[1] - 2, "BOSS DEFEATED!", "#ffd24b");
     // guaranteed drop
-    const it = generateItem(this.rng, this.rng.pick(SLOT_ORDER), Math.max(1, Math.round(this.worldCol / 50)), this.run.regionIdx, "EPIC");
+    const it = generateItem(this.rng, this.rng.pick(SLOT_ORDER), Math.max(1, Math.round(this.worldCol / 50)), this.run.regionIdx, "EPIC", this.profile.classId);
     this.cb.onLoot?.(it);
     this.checkAchievements();
     this.cb.onDirty?.();
@@ -1178,7 +1260,7 @@ export class Game {
       if (Math.abs(this.worldCol - p.x) < 1.6 && Math.abs(pf - p.row) < 3.2) {
         if (p.kind === "chest") {
           p.dead = true;
-          const it = generateItem(this.rng, this.rng.pick(SLOT_ORDER), Math.max(1, Math.round(this.worldCol / 55)), this.run.regionIdx, this.rng.chance(0.3) ? "EPIC" : "RARE");
+          const it = generateItem(this.rng, this.rng.pick(SLOT_ORDER), Math.max(1, Math.round(this.worldCol / 55)), this.run.regionIdx, this.rng.chance(0.3) ? "EPIC" : "RARE", this.profile.classId);
           this.cb.onLoot?.(it);
           const g = 50 + this.run.distance;
           this.grantGold(g);

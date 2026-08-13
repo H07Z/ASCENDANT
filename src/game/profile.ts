@@ -44,6 +44,17 @@ const SLOT_ITEMS: Record<Slot, string[]> = {
   earrings: ["Studs", "Drops", "Earrings", "Hooks"],
 };
 
+export const CLASS_WEAPONS: Record<string, string[]> = {
+  warrior: ["Claymore", "Longsword", "Steel Blade", "Broadsword", "Zweihander"],
+  knight: ["Bastard Sword", "Aegis Shield", "Knightly Sword", "Kite Shield", "Tower Shield"],
+  assassin: ["Dagger", "Kris", "Twin Blades", "Stiletto", "Main-Gauche"],
+  ranger: ["Recurve Bow", "Longbow", "Great Bow", "Composite Bow", "Flatbow"],
+  mage: ["Archstaff", "Sorcerer Staff", "Arcane Wand", "Spellbook", "Elemental Prism"],
+  berserker: ["Greatsword", "War Axe", "Battleaxe", "Labrys", "Greataxe"],
+  gunner: ["Hand Cannon", "Rifle", "Blaster", "Repeater", "Pulse Pistol"],
+  bard: ["Lute", "Lyre", "Harp", "Mandolin", "Zither"],
+};
+
 const REGION_ADJ = [
   ["Ashen", "Dusty", "Worn", "Iron"],
   ["Verdant", "Thorned", "Wild", "Mossy"],
@@ -119,7 +130,8 @@ export function generateItem(
   slot: Slot,
   ilvl: number,
   regionIdx: number,
-  forceRarity?: Rarity
+  forceRarity?: Rarity,
+  classId?: string
 ): Item {
   const rarity = forceRarity ?? rollRarity(rng, regionIdx * 0.5);
   const pool = SLOT_STATS[slot];
@@ -133,7 +145,14 @@ export function generateItem(
     stats[k] = roundStat(k, v);
   }
   const adj = rng.pick(REGION_ADJ[Math.min(regionIdx, REGION_ADJ.length - 1)]);
-  const noun = rng.pick(SLOT_ITEMS[slot]);
+  
+  let noun = "";
+  if (slot === "weapon" && classId && CLASS_WEAPONS[classId]) {
+    noun = rng.pick(CLASS_WEAPONS[classId]);
+  } else {
+    noun = rng.pick(SLOT_ITEMS[slot]);
+  }
+
   const item: Item = {
     uid: nextUid(),
     slot,
@@ -268,9 +287,9 @@ export function newProfile(name: string, classId: string): Profile {
     weapon: null, helmet: null, chest: null, gloves: null,
     boots: null, ring: null, necklace: null, earrings: null,
   };
-  // starter weapon
+  // starter weapon - generated specifically for the chosen class
   const rng = new RNG((Math.random() * 1e9) | 0);
-  equipment.weapon = generateItem(rng, "weapon", 1, 0, "COMMON");
+  equipment.weapon = generateItem(rng, "weapon", 1, 0, "COMMON", classId);
   const achievements: Profile["achievements"] = {};
   return {
     version: 1,

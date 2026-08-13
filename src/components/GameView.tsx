@@ -147,7 +147,7 @@ export default function GameView({
     const rng = new RNG(Date.now() + profile.inventory.length);
     const regionIdx = hud?.regionIdx ?? 0;
     const ilvl = Math.max(1, Math.round((hud?.distance ?? 0) / 55));
-    const it = generateItem(rng, SLOT_ORDER[Math.floor(rng.next() * SLOT_ORDER.length)], ilvl, regionIdx, rarity as never);
+    const it = generateItem(rng, SLOT_ORDER[Math.floor(rng.next() * SLOT_ORDER.length)], ilvl, regionIdx, rarity as never, profile.classId);
     profile.inventory.push(it);
     persist();
     bump((n) => n + 1);
