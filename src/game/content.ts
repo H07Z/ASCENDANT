@@ -100,6 +100,20 @@ export const ENEMY_ART: Record<string, string[][]> = {
     [" [o] ", "/|T|\\", " | | "],
     [" [o] ", "/|T|\\", " | | "],
   ],
+  dread_knight: [
+    [
+      "  [0] /===>",
+      " /(T)\\===",
+      "  (/=\\)",
+      "  // \\\\"
+    ],
+    [
+      "  [0] /===>",
+      " /(T)\\===",
+      "  (/=\\)",
+      "  \\\\ //"
+    ]
+  ],
   construct: [
     [" [O] ", "{|||}", " [ ] "],
     [" [O] ", "{|||}", " [ ] "],
@@ -131,10 +145,6 @@ export const ENEMY_ART: Record<string, string[][]> = {
   floatguard: [
     [" ◇◇◇ ", "[ O ]", " / \\ "],
     [" ◇◇◇ ", "[ O ]", " / \\ "],
-  ],
-  cavalry: [
-    [">==[o]  ", " /||T|->", "(oo)||  ", " nn  nn "],
-    [">==[o]  ", " /||T|->", "(oo)||  ", "  nn nn "],
   ],
 };
 
@@ -674,35 +684,36 @@ export const CLASS_LIST: ClassDef[] = Object.values(CLASSES);
 export const ENEMIES: Record<string, EnemyDef> = {
   // Ashen Plains
   boar: { id: "boar", name: "Tusk Boar", artKey: "boar", color: "#c98a5a", ai: "charger", hp: 70, atk: 12, def: 4, xp: 18, gold: 2, size: [5, 3] },
-  plains_wolf: { id: "plains_wolf", name: "Dust Wolf", artKey: "wolf", color: "#b9a98c", ai: "walker", hp: 60, atk: 14, def: 3, xp: 20, gold: 2, size: [6, 3] },
-  goblin: { id: "goblin", name: "Scrap Goblin", artKey: "goblin", color: "#8fd17a", ai: "walker", hp: 52, atk: 11, def: 2, xp: 16, gold: 3, size: [4, 3] },
+  plains_wolf: { id: "plains_wolf", name: "Dust Wolf", artKey: "wolf", color: "#b9a98c", ai: "walker", hp: 60, atk: 14, def: 3, xp: 20, gold: 3, size: [6, 3] },
+  goblin: { id: "goblin", name: "Scrap Goblin", artKey: "goblin", color: "#8fd17a", ai: "walker", hp: 52, atk: 11, def: 2, xp: 16, gold: 2, size: [4, 3] },
   bandit: { id: "bandit", name: "Road Bandit", artKey: "bandit", color: "#cda3a3", ai: "walker", hp: 80, atk: 16, def: 5, xp: 26, gold: 4, size: [5, 3] },
   // Dark Forest
-  forest_beast: { id: "forest_beast", name: "Thicket Beast", artKey: "beast", color: "#6fbf6f", ai: "charger", hp: 110, atk: 18, def: 5, xp: 30, gold: 3, size: [6, 3] },
-  treant: { id: "treant", name: "Grove Treant", artKey: "treant", color: "#5a9d5a", ai: "turret", hp: 180, atk: 16, def: 12, xp: 40, gold: 4, size: [5, 3] },
-  dark_elf: { id: "dark_elf", name: "Dusk Elf", artKey: "mage", color: "#9b6bff", ai: "flyer", hp: 90, atk: 22, def: 4, xp: 34, gold: 4, size: [5, 3], ranged: true },
-  shadow_wolf: { id: "shadow_wolf", name: "Shadow Wolf", artKey: "wolf", color: "#7a6cff", ai: "walker", hp: 96, atk: 24, def: 4, xp: 32, gold: 4, size: [6, 3] },
+  forest_beast: { id: "forest_beast", name: "Thicket Beast", artKey: "beast", color: "#6fbf6f", ai: "charger", hp: 110, atk: 18, def: 5, xp: 30, gold: 4, size: [6, 3] },
+  treant: { id: "treant", name: "Grove Treant", artKey: "treant", color: "#5a9d5a", ai: "turret", hp: 180, atk: 16, def: 12, xp: 40, gold: 5, size: [5, 3] },
+  dark_elf: { id: "dark_elf", name: "Dusk Elf", artKey: "mage", color: "#9b6bff", ai: "flyer", hp: 90, atk: 22, def: 4, xp: 34, gold: 6, size: [5, 3], ranged: true },
+  shadow_wolf: { id: "shadow_wolf", name: "Shadow Wolf", artKey: "wolf", color: "#7a6cff", ai: "walker", hp: 96, atk: 24, def: 4, xp: 32, gold: 5, size: [6, 3] },
   // Ancient Ruins
-  skeleton: { id: "skeleton", name: "Bone Sentinel", artKey: "skeleton", color: "#d8d2b8", ai: "walker", hp: 120, atk: 24, def: 6, xp: 38, gold: 4, size: [5, 3] },
-  ruin_guard: { id: "ruin_guard", name: "Ruin Guardian", artKey: "knight", color: "#c9b483", ai: "walker", hp: 200, atk: 26, def: 16, xp: 52, gold: 5, size: [5, 3] },
-  ancient_knight: { id: "ancient_knight", name: "Ancient Knight", artKey: "knight", color: "#e0c870", ai: "charger", hp: 240, atk: 32, def: 18, xp: 64, gold: 6, size: [5, 3] },
-  construct: { id: "construct", name: "Ruin Construct", artKey: "construct", color: "#b0a0c8", ai: "turret", hp: 300, atk: 28, def: 22, xp: 70, gold: 5, size: [5, 4], ranged: true },
+  skeleton: { id: "skeleton", name: "Bone Sentinel", artKey: "skeleton", color: "#d8d2b8", ai: "walker", hp: 120, atk: 24, def: 6, xp: 38, gold: 6, size: [5, 3] },
+  ruin_guard: { id: "ruin_guard", name: "Ruin Guardian", artKey: "knight", color: "#c9b483", ai: "walker", hp: 200, atk: 26, def: 16, xp: 52, gold: 8, size: [5, 3] },
+  ancient_knight: { id: "ancient_knight", name: "Ancient Knight", artKey: "knight", color: "#e0c870", ai: "charger", hp: 240, atk: 32, def: 18, xp: 64, gold: 10, size: [5, 3] },
+  construct: { id: "construct", name: "Ruin Construct", artKey: "construct", color: "#b0a0c8", ai: "turret", hp: 300, atk: 28, def: 22, xp: 70, gold: 9, size: [5, 4], ranged: true },
   // Frozen Wastes
-  ice_wolf: { id: "ice_wolf", name: "Frost Wolf", artKey: "icewolf", color: "#9fe0ff", ai: "walker", hp: 150, atk: 30, def: 8, xp: 46, gold: 5, size: [6, 3] },
-  frost_goblin: { id: "frost_goblin", name: "Frost Goblin", artKey: "goblin", color: "#a0e8ff", ai: "walker", hp: 130, atk: 28, def: 6, xp: 44, gold: 5, size: [4, 3] },
-  ice_golem: { id: "ice_golem", name: "Ice Golem", artKey: "icegolem", color: "#bfeeff", ai: "turret", hp: 420, atk: 34, def: 28, xp: 90, gold: 6, size: [6, 4] },
-  frost_knight: { id: "frost_knight", name: "Frost Knight", artKey: "knight", color: "#cfeaff", ai: "charger", hp: 320, atk: 40, def: 24, xp: 84, gold: 7, size: [5, 3] },
+  ice_wolf: { id: "ice_wolf", name: "Frost Wolf", artKey: "icewolf", color: "#9fe0ff", ai: "walker", hp: 150, atk: 30, def: 8, xp: 46, gold: 8, size: [6, 3] },
+  frost_goblin: { id: "frost_goblin", name: "Frost Goblin", artKey: "goblin", color: "#a0e8ff", ai: "walker", hp: 130, atk: 28, def: 6, xp: 44, gold: 7, size: [4, 3] },
+  ice_golem: { id: "ice_golem", name: "Ice Golem", artKey: "icegolem", color: "#bfeeff", ai: "turret", hp: 420, atk: 34, def: 28, xp: 90, gold: 12, size: [6, 4] },
+  frost_knight: { id: "frost_knight", name: "Frost Knight", artKey: "knight", color: "#cfeaff", ai: "charger", hp: 320, atk: 40, def: 24, xp: 84, gold: 11, size: [5, 3] },
   // Demon Lands
-  demon_soldier: { id: "demon_soldier", name: "Demon Soldier", artKey: "demon", color: "#ff7a5a", ai: "walker", hp: 220, atk: 42, def: 14, xp: 70, gold: 6, size: [6, 4] },
-  hell_beast: { id: "hell_beast", name: "Hell Beast", artKey: "hellbeast", color: "#ff5a3a", ai: "charger", hp: 300, atk: 48, def: 12, xp: 92, gold: 7, size: [6, 4] },
-  demon_knight: { id: "demon_knight", name: "Demon Knight", artKey: "knight", color: "#ff8a4a", ai: "charger", hp: 380, atk: 54, def: 26, xp: 110, gold: 8, size: [5, 3] },
-  abyss_mage: { id: "abyss_mage", name: "Abyssal Mage", artKey: "mage", color: "#c44bff", ai: "flyer", hp: 240, atk: 60, def: 10, xp: 96, gold: 8, size: [5, 3], ranged: true },
+  demon_soldier: { id: "demon_soldier", name: "Demon Soldier", artKey: "demon", color: "#ff7a5a", ai: "walker", hp: 220, atk: 42, def: 14, xp: 70, gold: 12, size: [6, 4] },
+  hell_beast: { id: "hell_beast", name: "Hell Beast", artKey: "hellbeast", color: "#ff5a3a", ai: "charger", hp: 300, atk: 48, def: 12, xp: 92, gold: 14, size: [6, 4] },
+  demon_knight: { id: "demon_knight", name: "Demon Knight", artKey: "knight", color: "#ff8a4a", ai: "charger", hp: 380, atk: 54, def: 26, xp: 110, gold: 16, size: [5, 3] },
+  abyss_mage: { id: "abyss_mage", name: "Abyssal Mage", artKey: "mage", color: "#c44bff", ai: "flyer", hp: 240, atk: 60, def: 10, xp: 96, gold: 15, size: [5, 3], ranged: true },
   // Floating Realm
-  sky_beast: { id: "sky_beast", name: "Sky Beast", artKey: "skybeast", color: "#bfe0ff", ai: "flyer", hp: 300, atk: 52, def: 16, xp: 100, gold: 7, size: [7, 4], ranged: true },
-  float_guard: { id: "float_guard", name: "Floating Guardian", artKey: "floatguard", color: "#d0c4ff", ai: "flyer", hp: 360, atk: 50, def: 30, xp: 120, gold: 8, size: [5, 3] },
-  arcane_construct: { id: "arcane_construct", name: "Arcane Construct", artKey: "construct", color: "#9ad8ff", ai: "turret", hp: 520, atk: 56, def: 38, xp: 150, gold: 8, size: [5, 4], ranged: true },
-  celestial_knight: { id: "celestial_knight", name: "Celestial Knight", artKey: "knight", color: "#fff0b0", ai: "charger", hp: 460, atk: 64, def: 34, xp: 160, gold: 9, size: [5, 3] },
-  ironhoof: { id: "ironhoof", name: "Ironhoof Cavalier", artKey: "cavalry", color: "#e8c070", ai: "cavalry", hp: 520, atk: 58, def: 22, xp: 180, gold: 16, size: [8, 4] },
+  sky_beast: { id: "sky_beast", name: "Sky Beast", artKey: "skybeast", color: "#bfe0ff", ai: "flyer", hp: 300, atk: 52, def: 16, xp: 100, gold: 15, size: [7, 4], ranged: true },
+  float_guard: { id: "float_guard", name: "Floating Guardian", artKey: "floatguard", color: "#d0c4ff", ai: "flyer", hp: 360, atk: 50, def: 30, xp: 120, gold: 16, size: [5, 3] },
+  arcane_construct: { id: "arcane_construct", name: "Arcane Construct", artKey: "construct", color: "#9ad8ff", ai: "turret", hp: 520, atk: 56, def: 38, xp: 150, gold: 18, size: [5, 4], ranged: true },
+  celestial_knight: { id: "celestial_knight", name: "Celestial Knight", artKey: "knight", color: "#fff0b0", ai: "charger", hp: 460, atk: 64, def: 34, xp: 160, gold: 20, size: [5, 3] },
+  // Rare Rear Ambush Monster (HARD+ difficulty)
+  dread_knight: { id: "dread_knight", name: "Dread Knight", artKey: "dread_knight", color: "#ffd24b", ai: "charger", hp: 480, atk: 56, def: 26, xp: 140, gold: 22, size: [11, 4] },
 };
 
 // ----------------------------------------------------------
@@ -711,27 +722,27 @@ export const ENEMIES: Record<string, EnemyDef> = {
 export const BOSSES: Record<string, BossDef> = {
   ashen_behemoth: {
     id: "ashen_behemoth", name: "GRAKK", title: "The Ashen Maw", artKey: "behemoth", color: "#c89060",
-    hp: 4200, atk: 60, def: 24, xp: 1200, gold: 80, tokens: 8, size: [20, 8],
+    hp: 4200, atk: 60, def: 24, xp: 1200, gold: 600, tokens: 8, size: [20, 8],
     attacks: [{ kind: "slam", windup: 1.1, dmgMult: 1.2 }, { kind: "charge", windup: 1.3, dmgMult: 1.5 }],
   },
   forest_wraith: {
     id: "forest_wraith", name: "SYLVANE", title: "Whisper of the Wood", artKey: "wraith", color: "#6fd98a",
-    hp: 6000, atk: 70, def: 22, xp: 1900, gold: 110, tokens: 12, size: [19, 8],
+    hp: 6000, atk: 70, def: 22, xp: 1900, gold: 850, tokens: 12, size: [19, 8],
     attacks: [{ kind: "wave", windup: 1.2, dmgMult: 1.1 }, { kind: "rain", windup: 1.4, dmgMult: 1.3 }],
   },
   ruin_sovereign: {
     id: "ruin_sovereign", name: "KAELDROS", title: "Warden of Dust", artKey: "sovereign", color: "#e0c870",
-    hp: 9000, atk: 88, def: 40, xp: 3000, gold: 150, tokens: 18, size: [19, 8],
+    hp: 9000, atk: 88, def: 40, xp: 3000, gold: 1300, tokens: 18, size: [19, 8],
     attacks: [{ kind: "slam", windup: 1.0, dmgMult: 1.3 }, { kind: "wave", windup: 1.3, dmgMult: 1.2 }, { kind: "charge", windup: 1.2, dmgMult: 1.6 }],
   },
   frost_colossus: {
     id: "frost_colossus", name: "GLACIAR", title: "The Eternal Cold", artKey: "brute", color: "#9fe0ff",
-    hp: 13000, atk: 100, def: 60, xp: 4400, gold: 190, tokens: 26, size: [21, 8],
+    hp: 13000, atk: 100, def: 60, xp: 4400, gold: 1900, tokens: 26, size: [21, 8],
     attacks: [{ kind: "slam", windup: 1.2, dmgMult: 1.4 }, { kind: "rain", windup: 1.5, dmgMult: 1.3 }],
   },
   demon_brute: {
     id: "demon_brute", name: "MALPHAZ", title: "Lord of Cinder", artKey: "brute", color: "#ff6a3a",
-    hp: 18000, atk: 124, def: 56, xp: 6500, gold: 240, tokens: 38, size: [21, 8],
+    hp: 18000, atk: 124, def: 56, xp: 6500, gold: 2700, tokens: 38, size: [21, 8],
     attacks: [{ kind: "slam", windup: 0.9, dmgMult: 1.5 }, { kind: "charge", windup: 1.1, dmgMult: 1.8 }, { kind: "rain", windup: 1.3, dmgMult: 1.4 }],
   },
   sky_sovereign: {
@@ -864,13 +875,13 @@ export const PET_LIST: PetDef[] = Object.values(PETS);
 
 // Gacha pull rates (percent). Displayed to the player in the summon UI.
 export const PET_GACHA_RATES: Record<Rarity, number> = {
-  COMMON: 58,
-  UNCOMMON: 28,
-  RARE: 10,
-  EPIC: 3.2,
-  LEGENDARY: 0.65,
-  MYTHIC: 0.12,
-  ANCIENT: 0.03,
+  COMMON: 62.0,
+  UNCOMMON: 27.0,
+  RARE: 8.0,
+  EPIC: 2.3,
+  LEGENDARY: 0.6,
+  MYTHIC: 0.08,
+  ANCIENT: 0.02,
 };
 
 export const PET_PULL_COST = 30; // Spirit Orbs per single summon

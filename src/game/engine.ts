@@ -22,7 +22,6 @@ import {
   type DmgNum,
   type Enemy,
   type FloatText,
-  type NpcEntity,
   type Particle,
   type Pickup,
   type Platform,
@@ -186,7 +185,6 @@ export class Game {
   rapidColor = "#5fd17a";
   petCd = 0;
   petBob = 0;
-  cavalryCd = 18; // seconds until next rare left-side cavalier
   skillCd: Record<string, number> = {};
 
   // entities
@@ -199,7 +197,6 @@ export class Game {
   pickups: Pickup[] = [];
   spikes: Spike[] = [];
   platforms: Platform[] = [];
-  npcs: NpcEntity[] = [];
 
   // fx
   shakeAmt = 0;
@@ -286,7 +283,6 @@ export class Game {
     this.pickups = [];
     this.spikes = [];
     this.platforms = [];
-    this.npcs = [];
     this.shakeAmt = 0;
     this.flash = 0;
     this.skillCd = {};
@@ -328,9 +324,8 @@ export class Game {
 
   private weaponTipX(): number {
     const glyph = CLASSES[this.profile.classId]?.weaponGlyph ?? ">";
-    const len = Math.max(1, glyph.length - 1);
-    if (this.facing < 0) return this.worldCol - 2 - len;
-    return this.worldCol + 2 + len;
+    // weapon overlay starts at worldCol + 2; projectile begins at the last visible glyph
+    return this.worldCol + 2 + Math.max(1, glyph.length - 1);
   }
 
   // ---- Unified Skill-Motion State Machine ------------------
@@ -569,7 +564,6 @@ export class Game {
     this.world.generate(this.cameraX + COLS);
     const spawns = this.world.popSpawns(this.cameraX + COLS + 6);
     for (const s of spawns) this.realizeSpawn(s);
-    this.maybeSpawnCavalry(dt);
 
     // auto combat
     if (this.profile.autoCombat) this.autoCombat(dt);
@@ -625,14 +619,7 @@ export class Game {
     // pickups
     this.collectPickups();
     this.updateCoins(dt);
-    // npcs
-    for (const n of this.npcs) {
-      n.bob += dt;
-      if (!n.talked && Math.abs(this.worldCol - n.x) < 3) {
-        n.talked = true;
-        this.npcTalk(n.npc);
-      }
-    }
+
 
     // death cleanup
     for (const e of this.enemies) {
@@ -645,7 +632,6 @@ export class Game {
     this.dmgNums = this.dmgNums.filter((d) => d.life > 0);
     this.floats = this.floats.filter((f) => f.life > 0);
     this.pickups = this.pickups.filter((p) => !p.dead && p.x > this.cameraX - 6);
-    this.npcs = this.npcs.filter((n) => n.x > this.cameraX - 6);
     this.spikes = this.spikes.filter((s) => s.x + s.w > this.cameraX - 4);
     this.platforms = this.platforms.filter((p) => p.x + p.w > this.cameraX - 4);
 
@@ -730,7 +716,6 @@ export class Game {
         this.spikes.push({ x: s.x, w: s.w, row: s.row });
         break;
       case "npc":
-        // Scene NPCs removed from the run.
         break;
       case "town":
         break;
@@ -768,30 +753,13 @@ export class Game {
   }
 
   private findTarget(range: number): Enemy | Boss | null {
-    const pf = this.playerFeetRow;
-
-    // Rare left-side cavalry ALWAYS takes priority while alive and in reach.
-    let leftThreat: Enemy | null = null;
-    let leftBest = range + 4;
-    for (const e of this.enemies) {
-      if (e.dead || e.hp <= 0) continue;
-      if (!e.fromLeft && e.ai !== "cavalry") continue;
-      const d = this.worldCol - e.x; // distance behind/left of the hero
-      if (d >= -1 && d <= leftBest && Math.abs(e.feetRow - pf) <= 6.0) {
-        leftThreat = e;
-        leftBest = d;
-      }
-    }
-    if (leftThreat) {
-      this.facing = -1;
-      return leftThreat;
-    }
-
     let best: Enemy | Boss | null = null;
     let bestD = range;
+    const pf = this.playerFeetRow;
     for (const e of this.enemies) {
       if (e.dead) continue;
       const d = e.x - this.worldCol;
+      // High tolerance on overlap and height difference to guarantee hits connect seamlessly
       if (d > -2.2 && d <= bestD && Math.abs(e.feetRow - pf) <= 6.0) {
         best = e;
         bestD = d;
@@ -803,29 +771,7 @@ export class Game {
         best = this.boss;
       }
     }
-    this.facing = 1;
     return best;
-  }
-
-  private maybeSpawnCavalry(dt: number) {
-    this.cavalryCd -= dt;
-    if (this.cavalryCd > 0) return;
-    if (this.dead || this.boss) return;
-    const tier = difficultyTier(this.run.distance);
-    if (tier.from < 15000 && tier.name !== "HARD" && tier.name !== "NIGHTMARE" && tier.name !== "ABYSS") return;
-    if (this.run.distance < 15000) return;
-    if (this.enemies.some((e) => !e.dead && (e.fromLeft || e.ai === "cavalry"))) return;
-
-    const e = makeEnemy(
-      { x: this.worldCol - 16, enemyId: "ironhoof", elite: true, level: 1 + Math.floor(this.run.distance / 240) + 4, fromLeft: true },
-      this.world
-    );
-    e.fromLeft = true;
-    e.cd = 0.2;
-    this.enemies.push(e);
-    this.cavalryCd = this.rng.range(22, 38);
-    this.headText("IRONHOOF FROM BEHIND!", "#e8c070");
-    this.flash = Math.min(1, this.flash + 0.25);
   }
 
   // ---- Companion pet ------------------------------------
@@ -912,8 +858,6 @@ export class Game {
 
   // Nearest living enemy ahead of the hero — used for the TARGET HUD panel.
   private displayTarget(): Enemy | null {
-    const left = this.enemies.find((e) => !e.dead && e.hp > 0 && (e.fromLeft || e.ai === "cavalry"));
-    if (left) return left;
     let best: Enemy | null = null;
     let bestD = 26;
     for (const e of this.enemies) {
@@ -964,7 +908,7 @@ export class Game {
 
     const spread = this.rapidShotsLeft % 2 === 0 ? -0.15 : 0.15;
     this.projectiles.push({
-      x: this.weaponTipX(), y: this.weaponY(), vx: 19 * this.facing, vy: spread,
+      x: this.weaponTipX(), y: this.weaponY(), vx: 19, vy: spread,
       life: 1.7, dmg: this.rapidDmg * this.rng.range(0.92, 1.08), color: this.rapidColor,
       fromPlayer: true, symbol: ">", pierce: 2,
     });
@@ -1025,7 +969,7 @@ export class Game {
         const n = id === "multi_shot" ? 3 : 1;
         for (let i = 0; i < n; i++) {
           this.projectiles.push({
-            x: this.weaponTipX(), y: this.weaponY(), vx: 17 * this.facing, vy: n > 1 ? (i - 1) * 0.8 : 0,
+            x: this.weaponTipX(), y: this.weaponY(), vx: 17, vy: n > 1 ? (i - 1) * 0.8 : 0,
             life: 1.6, dmg: this.playerAtkValue(baseMult, true).dmg, color: cls.color,
             fromPlayer: true, symbol: sym, pierce: 99, aoe: def.radius,
           });
@@ -1300,9 +1244,9 @@ export class Game {
     // Gold is no longer granted instantly — it bursts out as lootable coins.
     this.spawnCoins(e.x, e.feetRow, e.gold, e.elite);
     this.addExp(e.xp);
-    // drops
+    // drops — lowered equipment drop rate
     const dropR = this.rng.next();
-    if ((e.elite && dropR < 0.28) || (!e.elite && dropR < 0.045) || e.ai === "cavalry") {
+    if ((e.elite && this.rng.chance(0.25)) || dropR < 0.02) {
       const it = generateItem(this.rng, this.rng.pick(SLOT_ORDER), Math.max(1, Math.round(this.worldCol / 60)), this.run.regionIdx, e.elite ? "RARE" : undefined, this.profile.classId);
       this.cb.onLoot?.(it);
       this.headText(`[${it.rarity}] ${it.name}`, RARITY_COLOR[it.rarity]);
@@ -1350,8 +1294,8 @@ export class Game {
     }
     this.addExp(b.xp);
     this.floatText(b.x, b.feetRow - b.size[1] - 2, "BOSS DEFEATED!", "#ffd24b");
-    // guaranteed drop
-    if (this.rng.chance(0.45)) {
+    // boss equipment drop — 40% chance for rare boss equipment
+    if (this.rng.chance(0.40)) {
       const it = generateItem(this.rng, this.rng.pick(SLOT_ORDER), Math.max(1, Math.round(this.worldCol / 50)), this.run.regionIdx, "EPIC", this.profile.classId);
       this.cb.onLoot?.(it);
     }
@@ -1403,16 +1347,17 @@ export class Game {
       if (Math.abs(this.worldCol - p.x) < 1.6 && Math.abs(pf - p.row) < 3.2) {
         if (p.kind === "chest") {
           p.dead = true;
-          if (this.rng.chance(0.22)) {
-            const it = generateItem(this.rng, this.rng.pick(SLOT_ORDER), Math.max(1, Math.round(this.worldCol / 55)), this.run.regionIdx, this.rng.chance(0.18) ? "EPIC" : "RARE", this.profile.classId);
+          // equipment drop rate lowered from chests (20% chance)
+          if (this.rng.chance(0.20)) {
+            const it = generateItem(this.rng, this.rng.pick(SLOT_ORDER), Math.max(1, Math.round(this.worldCol / 55)), this.run.regionIdx, this.rng.chance(0.3) ? "EPIC" : "RARE", this.profile.classId);
             this.cb.onLoot?.(it);
-            this.headText(`[${it.rarity}] ${it.name}`, RARITY_COLOR[it.rarity]);
           }
-          const g = Math.round(6 + this.run.distance * 0.008 + this.run.regionIdx * 4);
-          this.spawnCoins(p.x, p.row + 2, g, true);
-          const chestOrbs = this.rng.int(2, 5);
+          // recalibrated chest gold: lower base, increases gradually with distance
+          const g = Math.round(12 + this.run.distance * 0.08);
+          this.grantGold(g);
+          const chestOrbs = this.rng.int(3, 8);
           this.profile.spiritOrbs = (this.profile.spiritOrbs ?? 0) + chestOrbs;
-          this.headText(`CHEST! +${chestOrbs}❂`, "#ffd24b");
+          this.headText(`CHEST! +${g}G +${chestOrbs}❂`, "#ffd24b");
           this.burst(p.x, 0, "#ffd24b", 14);
         } else if (p.payload) {
           p.dead = true;
@@ -1427,18 +1372,7 @@ export class Game {
     }
   }
 
-  private npcTalk(npc: string) {
-    const msgs: Record<string, string> = {
-      merchant: "MERCHANT: Fine wares in the next town!",
-      elder: "ELDER: The beasts grow bolder... be ready.",
-      wanderer: "WANDERER: Seek the boss at the region's end.",
-      blacksmith: "BLACKSMITH: Bring me ore to forge mightier arms.",
-    };
-    this.headText(msgs[npc] ?? "...", "#bfe0ff");
-    // small blessing buff
-    this.buffTimer = 6;
-    this.buffAtk = Math.max(this.buffAtk, 1.15);
-  }
+
 
   // --------------------------------------------------------
   private checkAchievements() {
@@ -1641,7 +1575,6 @@ export class Game {
     this.drawPlatforms(p);
     this.drawSpikes();
     this.drawPickups();
-    this.drawNpcs();
     this.drawEnemies();
     this.drawBoss();
     this.drawProjectiles();
@@ -1780,16 +1713,7 @@ export class Game {
     }
   }
 
-  private drawNpcs() {
-    return;
-    for (const n of this.npcs) {
-      const sx = this.sx(n.x);
-      if (sx < -3 || sx > COLS + 3) continue;
-      const yo = Math.round(Math.sin(n.bob) * 0.3);
-      this.grid.blit(["  O  ", " /|\\ ", " / \\ "], sx - 2, n.row - 2 + yo, "#bfe0ff");
-      this.grid.text(sx - Math.ceil(n.npc.length / 2), n.row - 4, `[${n.npc.toUpperCase()}]`, "#9fd0ff");
-    }
-  }
+
 
   private drawEnemies() {
     const pf = this.playerFeetRow;
@@ -1802,9 +1726,7 @@ export class Game {
       const x0 = sx - Math.floor(w / 2);
       const y0 = e.feetRow - h + 1;
       const col = e.hurtT > 0 ? "#ffffff" : e.color;
-      if (e.fromLeft || e.ai === "cavalry") {
-        this.grid.text(x0, y0 - 2, "RARE!", "#e8c070");
-      } else if (e.elite) {
+      if (e.elite) {
         for (let i = -1; i <= w; i++) { this.grid.set(x0 + i, y0 - 1, "*", "#ffd24b"); }
         this.grid.text(x0, y0 - 2, "ELITE", "#ffd24b");
       }
@@ -1832,7 +1754,9 @@ export class Game {
 
   private drawProjectiles() {
     for (const p of this.projectiles) {
-      const sx = this.sx(p.x);     const trail = p.fromPlayer ? "·" : "·";
+      const sx = this.sx(p.x);
+      if (sx < -2 || sx > COLS + 2) continue;
+      const trail = p.fromPlayer ? "·" : "·";
       this.grid.set(sx - Math.sign(p.vx), Math.round(p.y), trail, darken(p.color, 0.5));
       this.grid.set(sx, Math.round(p.y), p.symbol, p.color);
     }
@@ -1870,10 +1794,7 @@ export class Game {
     // weapon overlay — drawn at hand level (the "/B\" row) where it was originally
     if (wpn && !this.dead) {
       const wy = y0 + 1;
-      if (this.facing < 0) {
-        const glyph = state === "attack" ? "<====" : [...cls.weaponGlyph].reverse().join("");
-        this.grid.text(sx - 2 - glyph.length + 2, wy, glyph, wpnColor);
-      } else if (state === "attack") this.grid.text(sx + 2, wy, "====>", wpnColor);
+      if (state === "attack") this.grid.text(sx + 2, wy, "====>", wpnColor);
       else this.grid.text(sx + 2, wy, cls.weaponGlyph, wpnColor);
     }
     // buff aura

@@ -108,7 +108,7 @@ export class World {
       hp: (1 + dist / 820) * tier.mult,
       atk: (1 + dist / 2100) * tier.mult,
       xp: (1 + dist / 2800) * (1 + (tier.mult - 1) * 0.6),
-      gold: (1 + dist / 2500) * (1 + (tier.mult - 1) * 0.6),
+      gold: (1 + dist / 4000) * (1 + (tier.mult - 1) * 0.4),
     };
   }
 
@@ -187,14 +187,7 @@ export class World {
         this.spawns.push({ kind: "chest", x: col, row: g - 3, tier: info.regionIdx + info.cycle });
         this.genCol += CLEAR_GAP;
         continue;
-      } else if (roll < 0.10 && info.regionIdx > 0) {
-        // npc quest-giver
-        const g = this.groundAt(col);
-        const npcs = ["merchant", "elder", "wanderer", "blacksmith"];
-        this.spawns.push({ kind: "npc", x: col, row: g - 4, npc: this.rng.pick(npcs) });
-        this.genCol += CLEAR_GAP + 4;
-        continue;
-      } else if (roll < (0.15 / densityMult)) {
+      } else if (roll < (0.14 / densityMult)) {
         // platform — isolated, reachable, no overlap with anything else
         const g = this.groundAt(col);
         const topRow = g - this.rng.int(4, 7);
@@ -233,8 +226,7 @@ export class World {
   }
 
   rollLoot(dist: number, regionIdx: number, boss: boolean): LootPayload {
-    // Slow gold curve: tiny early, climbs gradually with distance.
-    const g = Math.round((2 + dist * 0.012 + regionIdx * 2) * (boss ? 8 : 1) * this.rng.range(0.85, 1.15));
+    const g = Math.round((2 + dist * 0.12) * (boss ? 8 : 1) * this.rng.range(0.8, 1.2));
     const pay: LootPayload = { gold: g };
     if (boss || this.rng.chance(0.12)) pay.crystals = this.rng.int(1, boss ? 8 : 3);
     if (this.rng.chance(0.5)) {

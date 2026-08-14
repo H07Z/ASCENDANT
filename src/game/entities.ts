@@ -24,6 +24,7 @@ export interface CombatCtx {
   damageNumber(x: number, y: number, val: number, crit: boolean, color?: string): void;
   floatText(x: number, y: number, text: string, color: string): void;
   shake(amount: number): void;
+  allEnemies?: Enemy[];
 }
 
 // ----------------------------------------------------------
@@ -58,15 +59,12 @@ export interface Enemy {
   skillWindup: number; // >0 while telegraphing
   skillKind: "none" | "lunge" | "volley" | "burst" | "enrage";
   enraged: boolean;
-  fromLeft: boolean; // rare cavalry ambush from behind the hero
 }
 
-export function makeEnemy(spawn: { x: number; enemyId: string; elite: boolean; level: number; fromLeft?: boolean }, world: World): Enemy {
+export function makeEnemy(spawn: { x: number; enemyId: string; elite: boolean; level: number }, world: World): Enemy {
   const d = ENEMIES[spawn.enemyId];
-  const diff = world.difficulty(world.dist(Math.max(0, spawn.x)));
+  const diff = world.difficulty(world.dist(spawn.x));
   const eliteMul = spawn.elite ? 2.6 : 1;
-  const dist = world.dist(Math.max(0, spawn.x));
-  const goldScale = 1 + dist / 8000; // slow gold growth with distance
   return {
     kind: "enemy",
     x: spawn.x,
@@ -78,7 +76,7 @@ export function makeEnemy(spawn: { x: number; enemyId: string; elite: boolean; l
     atk: Math.round(d.atk * diff.atk * (1 + spawn.level * 0.1) * (spawn.elite ? 1.5 : 1)),
     def: Math.round(d.def * (1 + spawn.level * 0.08)),
     xp: Math.round(d.xp * diff.xp * (spawn.elite ? 4 : 1)),
-    gold: Math.max(1, Math.round(d.gold * goldScale * (spawn.elite ? 2.2 : 1))),
+    gold: Math.round(d.gold * diff.gold * (spawn.elite ? 5 : 1)),
     elite: spawn.elite,
     level: spawn.level,
     ai: d.ai,
@@ -98,7 +96,6 @@ export function makeEnemy(spawn: { x: number; enemyId: string; elite: boolean; l
     skillWindup: 0,
     skillKind: "none",
     enraged: false,
-    fromLeft: !!spawn.fromLeft || d.ai === "cavalry",
   };
 }
 
@@ -218,36 +215,39 @@ export function updateEnemy(e: Enemy, ctx: CombatCtx) {
   }
   const rageMul = e.enraged ? 1.5 : 1;
 
-  // Melee reach: beyond this the monster must close the gap.
-  const MELEE_REACH = 2.2;
-  // Ranged monsters still want to be within firing distance.
-  const FIRE_REACH = 15;
+  // Rank among living enemies ordered by absolute distance to player
+  const living = (ctx.allEnemies ?? [])
+    .filter((other: Enemy) => !other.dead && other.hp > 0)
+    .sort((a: Enemy, b: Enemy) => Math.abs(a.x - ctx.player.col) - Math.abs(b.x - ctx.player.col));
+  const rank = Math.max(0, living.indexOf(e));
 
-  // ground followers — always pursue the hero when out of attack range
+  // Determine target column depending on whether enemy is to the left or right of the player
+  const isLeft = e.x < ctx.player.col;
+  const gap = 2.2 + rank * 2.5;
+  const targetX = isLeft ? ctx.player.col - gap : ctx.player.col + gap;
+
+  // ground followers
   if (e.ai === "walker" || e.ai === "charger") {
-    const speed = (e.ai === "charger" ? 3.4 : 1.7) * rageMul;
-    if (e.ranged) {
-      // ranged ground units close in until they can fire, then hold position
-      if (dist > FIRE_REACH) e.x += Math.min(speed * dt, dist - FIRE_REACH);
-      else if (dist < 4 && dist > -4) e.x -= speed * 0.6 * dt; // kite backwards
-    } else if (dist > MELEE_REACH) {
-      // out of melee range: walk toward the hero
-      e.x += Math.min(speed * dt, dist - MELEE_REACH);
-    } else if (dist < -MELEE_REACH) {
-      // hero slipped behind: turn around and pursue
-      e.x -= Math.min(speed * dt, Math.abs(dist) - MELEE_REACH);
+    const speed = (e.ai === "charger" ? 3.6 : 1.8) * rageMul;
+    if (e.x > targetX) {
+      e.x -= Math.min(speed * dt, e.x - targetX);
+    } else if (e.x < targetX) {
+      e.x += Math.min(speed * dt, targetX - e.x);
     }
-    e.feetRow = ctx.groundAt(Math.round(e.x)) - 1;
+    e.feetRow = ctx.groundAt(Math.round(e.x));
   } else if (e.ai === "flyer") {
-    const speed = 2.6 * rageMul;
-    const want = e.ranged ? 10 : MELEE_REACH;
-    if (dist > want) e.x += Math.min(speed * dt, dist - want);
-    else if (dist < -want) e.x -= Math.min(speed * dt, Math.abs(dist) - want);
-    e.feetRow = ctx.groundAt(Math.round(e.x)) - 3.5 - Math.sin(ctx.t * 2 + e.anim) * 0.5;
+    const speed = 2.2 * rageMul;
+    const flyGap = 3.8 + rank * 2.5;
+    const flyTargetX = isLeft ? ctx.player.col - flyGap : ctx.player.col + flyGap;
+    if (e.x > flyTargetX) {
+      e.x -= Math.min(speed * dt, e.x - flyTargetX);
+    } else if (e.x < flyTargetX) {
+      e.x += Math.min(speed * dt, flyTargetX - e.x);
+    }
+    e.feetRow = ctx.groundAt(Math.round(e.x)) - 2.5 - Math.sin(ctx.t * 2 + e.anim) * 0.5;
   } else {
-    // turret: rooted, but higher tiers can shuffle slightly toward the hero
-    if (e.skillTier >= 2 && Math.abs(dist) > 12) e.x += Math.sign(dist) * 0.6 * dt;
-    e.feetRow = ctx.groundAt(Math.round(e.x)) - 2;
+    // turret: stationary
+    e.feetRow = ctx.groundAt(Math.round(e.x));
   }
 
   // ---- monster special skills -----------------------------
@@ -277,9 +277,9 @@ export function updateEnemy(e: Enemy, ctx: CombatCtx) {
         symbol: "●",
       });
     }
-  } else if (sameHeight && Math.abs(dist) < (e.ai === "cavalry" ? 3.2 : 5.4) && e.cd <= 0 && !ctx.player.invuln) {
-    e.cd = e.ai === "cavalry" ? 0.55 : e.ai === "charger" ? 1.6 : 1.2;
-    ctx.hurtPlayer(e.atk * (e.ai === "cavalry" ? 1.15 : 1), e.name);
+  } else if (sameHeight && Math.abs(dist) < 5.4 && e.cd <= 0 && !ctx.player.invuln) {
+    e.cd = e.ai === "charger" ? 1.6 : 1.2;
+    ctx.hurtPlayer(e.atk, e.name);
     ctx.burst(e.x, e.feetRow - 1, "#ff6a4a", 4);
   }
 }

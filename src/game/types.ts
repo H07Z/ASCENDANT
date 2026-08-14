@@ -176,7 +176,7 @@ export interface ClassDef {
 }
 
 // ---- Enemies / Bosses --------------------------------------
-export type AIType = "walker" | "charger" | "flyer" | "turret" | "cavalry";
+export type AIType = "walker" | "charger" | "flyer" | "turret";
 
 export interface EnemyDef {
   id: string;
