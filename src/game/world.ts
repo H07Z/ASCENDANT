@@ -208,6 +208,12 @@ export class World {
         this.genCol += CLEAR_GAP;
         continue;
       } else if (roll < (0.27 + eliteChance) * densityMult) {
+        // Rare Rear Ambush Horse Knight (HARD difficulty tier 15,000m+ and beyond)
+        if (tier.from >= 15000 && this.rng.chance(0.35)) {
+          this.spawns.push({ kind: "enemy", x: col - 28, enemyId: "dread_knight", elite: true, level: diff.level + 3 });
+          this.genCol += CLEAR_GAP + 14;
+          continue;
+        }
         // elite — spawns alone in a clean arena; frequency scales with difficulty
         const id = this.rng.pick(info.region.enemies);
         this.spawns.push({ kind: "enemy", x: col, enemyId: id, elite: true, level: diff.level + 2 });

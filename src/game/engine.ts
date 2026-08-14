@@ -1157,29 +1157,31 @@ export class Game {
    */
   private spawnCoins(x: number, feetRow: number, totalGold: number, rich: boolean) {
     if (totalGold <= 0) return;
-    // Use more pieces and stronger velocity so the gold burst is instantly readable.
-    const count = Math.max(2, Math.min(rich ? 14 : 8, Math.round(totalGold / 7) || 2));
+    // Colossal gold eruption: shoots high into the air and scatters across half the screen!
+    const count = Math.max(4, Math.min(rich ? 25 : 15, Math.round(totalGold / 3) || 4));
     const per = Math.max(1, Math.floor(totalGold / count));
     let remaining = totalGold;
     for (let i = 0; i < count; i++) {
       const amount = i === count - 1 ? remaining : per;
       remaining -= amount;
+      // Scatter in wide forward and backward spread directions
+      const spreadDir = this.rng.chance(0.8) ? 1 : -0.5;
       this.pickups.push({
         kind: "coin",
         x,
         row: feetRow,
         bob: this.rng.range(0, 6),
         payload: { gold: amount },
-        // dramatic forward splash with extra height and spread
-        vx: this.rng.range(6, rich ? 18 : 13),
-        vy: this.rng.range(12, rich ? 22 : 18),
-        height: 1.2,
+        // extreme velocity eruption for massive visual impact
+        vx: spreadDir * this.rng.range(22, rich ? 65 : 42),
+        vy: this.rng.range(22, rich ? 42 : 32),
+        height: 2.5,
         landed: false,
-        life: 18,
+        life: 20,
       });
     }
-    // big golden burst marker at the corpse so the drop is impossible to miss
-    this.burst(x, feetRow - 2, "#ffd24b", rich ? 22 : 12);
+    // colossal golden burst marker at the corpse
+    this.burst(x, feetRow - 2, "#ffd24b", rich ? 50 : 30);
   }
 
   /** Coin arc, bounce, magnet-to-hero and despawn. */
@@ -1190,16 +1192,16 @@ export class Game {
       const ground = this.world.groundAt(Math.round(p.x)) - 1;
 
       if (!p.landed) {
-        p.vy = (p.vy ?? 0) - 30 * dt; // lower gravity = longer visible arc
+        p.vy = (p.vy ?? 0) - 22 * dt; // low gravity = floaty arcade eruption
         p.height = (p.height ?? 0) + (p.vy ?? 0) * dt;
         p.x += (p.vx ?? 0) * dt;
-        p.vx = (p.vx ?? 0) * 0.99; // keep forward momentum visible
+        p.vx = (p.vx ?? 0) * 0.995; // maintain high momentum across the screen
         if ((p.height ?? 0) <= 0) {
-          // small bounce, then settle
+          // bouncy roll across the floor
           if (Math.abs(p.vy ?? 0) > 4) {
             p.height = 0;
-            p.vy = Math.abs(p.vy ?? 0) * 0.30;
-            p.vx = (p.vx ?? 0) * 0.65;
+            p.vy = Math.abs(p.vy ?? 0) * 0.48;
+            p.vx = (p.vx ?? 0) * 0.82;
           } else {
             p.height = 0;
             p.vy = 0;
@@ -1208,13 +1210,13 @@ export class Game {
           }
         }
       } else {
-        // gentle magnet so coins are never frustrating to grab
+        // magnet pulls coins towards the hero from far away
         const d = this.worldCol - p.x;
-        if (Math.abs(d) < 7) {
+        if (Math.abs(d) < 28) {
           p.magnet = true;
-          p.x += Math.sign(d) * Math.min(Math.abs(d), 11 * dt);
+          p.x += Math.sign(d) * Math.min(Math.abs(d), 22 * dt);
         }
-        p.life = (p.life ?? 14) - dt;
+        p.life = (p.life ?? 20) - dt;
         if ((p.life ?? 0) <= 0) p.dead = true;
       }
 

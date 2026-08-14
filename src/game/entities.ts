@@ -228,13 +228,15 @@ export function updateEnemy(e: Enemy, ctx: CombatCtx) {
 
   // ground followers
   if (e.ai === "walker" || e.ai === "charger") {
-    const speed = (e.ai === "charger" ? 3.6 : 1.8) * rageMul;
+    // Dread Knight (rare horse knight) moves at extreme speed to catch up with the hero
+    const baseSpd = e.artKey === "dread_knight" ? 6.8 : (e.ai === "charger" ? 3.6 : 1.8);
+    const speed = baseSpd * rageMul;
     if (e.x > targetX) {
       e.x -= Math.min(speed * dt, e.x - targetX);
     } else if (e.x < targetX) {
       e.x += Math.min(speed * dt, targetX - e.x);
     }
-    e.feetRow = ctx.groundAt(Math.round(e.x));
+    e.feetRow = ctx.groundAt(Math.round(e.x)) - 1;
   } else if (e.ai === "flyer") {
     const speed = 2.2 * rageMul;
     const flyGap = 3.8 + rank * 2.5;
@@ -244,10 +246,10 @@ export function updateEnemy(e: Enemy, ctx: CombatCtx) {
     } else if (e.x < flyTargetX) {
       e.x += Math.min(speed * dt, flyTargetX - e.x);
     }
-    e.feetRow = ctx.groundAt(Math.round(e.x)) - 2.5 - Math.sin(ctx.t * 2 + e.anim) * 0.5;
+    e.feetRow = ctx.groundAt(Math.round(e.x)) - 3.5 - Math.sin(ctx.t * 2 + e.anim) * 0.5;
   } else {
     // turret: stationary
-    e.feetRow = ctx.groundAt(Math.round(e.x));
+    e.feetRow = ctx.groundAt(Math.round(e.x)) - 1;
   }
 
   // ---- monster special skills -----------------------------
