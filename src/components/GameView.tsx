@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { DIAMOND_REVIVE_COST, Game, type HudSnapshot } from "../game/engine";
+import { sound } from "../game/audio";
 import { CLASSES, PETS, PET_MAX_STAR, PET_PULL10_COST, PET_PULL_COST, SKILLS } from "../game/content";
 import { type PullResult, generateItem, pullPetMany, starUpCost } from "../game/profile";
 import { RNG } from "../game/rng";
@@ -111,6 +112,14 @@ export default function GameView({
   const g = () => gameRef.current!;
   const refresh = () => {
     g().applyProfile();
+    persist();
+    bump((n) => n + 1);
+  };
+
+  const toggleSound = () => {
+    const next = profile.sound === false ? true : false;
+    profile.sound = next;
+    sound.setEnabled(next);
     persist();
     bump((n) => n + 1);
   };
@@ -262,6 +271,9 @@ export default function GameView({
           <Btn color="#7fd0ff" onClick={() => setOverlay("guide")}>
             ? guide
           </Btn>
+          <Btn color={profile.sound !== false ? "#5fd17a" : "#6a7a8a"} onClick={toggleSound}>
+            {profile.sound !== false ? "🔊" : "🔇"}
+          </Btn>
           <Btn color="#ffd24b" onClick={() => setOverlay("pause")}>
             ⏸ menu
           </Btn>
@@ -319,6 +331,7 @@ export default function GameView({
             persist();
             bump((n) => n + 1);
           }}
+          onToggleSound={toggleSound}
           onSaveExit={() => {
             persist();
             onQuit();
@@ -409,7 +422,10 @@ function CtrlBtn({
   const pct = onCd ? Math.min(1, cd / cdMax) : 0;
   return (
     <button
-      onClick={onClick}
+      onClick={() => {
+        sound.click();
+        onClick();
+      }}
       className="ctrl-btn relative min-w-[56px] flex-1 overflow-hidden border px-1.5 py-1.5 text-center transition-colors hover:bg-white/5 active:bg-white/10 sm:min-w-[64px] sm:px-2 sm:py-2"
       style={{ borderColor: color + (onCd || locked ? "33" : "77"), color: onCd || locked ? "#5a6675" : color }}
     >

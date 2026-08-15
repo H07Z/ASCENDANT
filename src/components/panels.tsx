@@ -15,6 +15,7 @@ import {
   petStarMult,
 } from "../game/content";
 import { type PullResult, combatPower, expForLevel, starUpCost, totalStats } from "../game/profile";
+import { sound } from "../game/audio";
 import {
   type Item,
   type Profile,
@@ -45,7 +46,10 @@ export function Btn({
 }) {
   return (
     <button
-      onClick={onClick}
+      onClick={() => {
+        if (!disabled) sound.click();
+        onClick?.();
+      }}
       disabled={disabled}
       className={`term-scroll px-2 py-1 text-xs uppercase tracking-wider border transition-colors ${
         disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-white/5 active:bg-white/10"
@@ -1083,6 +1087,7 @@ export function PausePanel({
   onQuit,
   onSaveExit,
   onToggleAuto,
+  onToggleSound,
 }: {
   profile: Profile;
   onResume: () => void;
@@ -1092,6 +1097,7 @@ export function PausePanel({
   onQuit: () => void;
   onSaveExit: () => void;
   onToggleAuto: () => void;
+  onToggleSound: () => void;
 }) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
@@ -1104,6 +1110,9 @@ export function PausePanel({
           <Btn color="#b98bff" onClick={onSkills}>✦ skills</Btn>
           <Btn color={profile.autoCombat ? "#ffd24b" : "#6a7a8a"} onClick={onToggleAuto}>
             {profile.autoCombat ? "⚙ auto-combat: ON" : "⚙ auto-combat: OFF"}
+          </Btn>
+          <Btn color={profile.sound !== false ? "#5fd17a" : "#6a7a8a"} onClick={onToggleSound}>
+            {profile.sound !== false ? "🔊 sound: ON" : "🔇 sound: OFF"}
           </Btn>
           <Btn color="#5fd17a" onClick={onSaveExit}>💾 save &amp; exit</Btn>
           <Btn color="#ff6a6a" onClick={onQuit}>✕ abandon run</Btn>

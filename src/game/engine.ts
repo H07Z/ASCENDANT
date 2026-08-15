@@ -16,6 +16,7 @@ import {
 import { Grid } from "./renderer";
 import { RNG } from "./rng";
 import { activePetEntry, combatPower, expForLevel, generateItem, totalStats } from "./profile";
+import { sound } from "./audio";
 import {
   type Boss,
   type CombatCtx,
@@ -117,6 +118,7 @@ interface Damagable {
   kb: number;
   dead?: boolean;
   feetRow: number;
+  headRow: number;
 }
 
 export class Game {
@@ -177,6 +179,7 @@ export class Game {
   buffAtk = 1;
   buffCrit = 0;
   buffTimer = 0;
+  bloodDripTimer = 0;
   autoAttackT = 0;
   rapidLockT = 0;
   rapidShotsLeft = 0;
@@ -324,7 +327,10 @@ export class Game {
 
   private weaponTipX(): number {
     const glyph = CLASSES[this.profile.classId]?.weaponGlyph ?? ">";
-    // weapon overlay starts at worldCol + 2; projectile begins at the last visible glyph
+    const dir = this.facing;
+    if (dir === -1) {
+      return this.worldCol - 2 - Math.max(1, glyph.length - 1);
+    }
     return this.worldCol + 2 + Math.max(1, glyph.length - 1);
   }
 
@@ -455,12 +461,43 @@ export class Game {
 
   private update(dt: number) {
     this.t += dt;
+    // Background music (BGM) driver
+    if (this.profile.sound !== false) {
+      if (this.boss && !this.boss.dead) {
+        sound.playBgm("boss");
+      } else {
+        sound.playBgm(REGIONS[this.run.regionIdx]?.id ?? "ashen_plains");
+      }
+    }
     // timers
     if (this.hurtT > 0) this.hurtT -= dt;
     if (this.invuln > 0) this.invuln -= dt;
     if (this.dashCd > 0) this.dashCd -= dt;
     if (this.potionCd > 0) this.potionCd -= dt;
-    if (this.buffTimer > 0) { this.buffTimer -= dt; if (this.buffTimer <= 0) { this.buffAtk = 1; this.buffCrit = 0; } }
+    if (this.buffTimer > 0) {
+      this.buffTimer -= dt;
+      if (this.buffTimer <= 0) {
+        this.buffAtk = 1;
+        this.buffCrit = 0;
+      } else if (this.profile.classId === "berserker") {
+        // Active Blood Rage continuously drips blood particles from Berserker's body
+        this.bloodDripTimer -= dt;
+        if (this.bloodDripTimer <= 0) {
+          this.bloodDripTimer = 0.08;
+          const bloodColors = ["#ff0033", "#dc143c", "#ff1a1a", "#b30000"];
+          this.particles.push({
+            x: this.worldCol + this.rng.range(-1.2, 1.2),
+            y: this.playerFeetRow - 2 + this.rng.range(-1, 1),
+            vx: this.rng.range(-1.5, 1.5),
+            vy: this.rng.range(1.2, 4.5),
+            life: 0.45,
+            max: 0.45,
+            color: this.rng.pick(bloodColors),
+            ch: this.rng.pick(["•", "·", "*", "v", "%"]),
+          });
+        }
+      }
+    }
     if (this.comboTimer > 0) { this.comboTimer -= dt; if (this.comboTimer <= 0) this.combo = 0; }
     if (this.shakeAmt > 0) this.shakeAmt = Math.max(0, this.shakeAmt - dt * 26);
     if (this.flash > 0) this.flash = Math.max(0, this.flash - dt * 2.6);
@@ -488,6 +525,13 @@ export class Game {
     // Ranger/Gunner Rapid Fire locks the hero in place while the burst resolves.
     if (this.rapidLockT > 0) { this.updateRapidFire(dt); speed = 0; }
 
+    // Arcane Orb locks the Mage in place while the energy orb travels across the screen
+    const arcaneOrbActive = this.projectiles.some((p) => p.isArcaneOrb && !p.dead && p.fromPlayer);
+    if (arcaneOrbActive) {
+      speed = 0;
+      this.castTimer = 0.15; // hold channeling pose
+    }
+
     // Dynamic skill motions (Leap, Dash, Blink, Backflip) take full control of movement
     if (this.motionPhase !== "none") { this.updateSkillMotion(dt); speed = 0; }
 
@@ -502,8 +546,8 @@ export class Game {
     this.worldCol += speed * dt;
     this.cameraX = this.worldCol - PLAYER_COL;
 
-    // Only progress run animation when moving; hold standing pose during combat stops
-    if (!this.dead && speed === 0 && this.state === "run" && ((frontTarget && !frontTarget.dead && frontTarget.hp > 0) || this.rapidLockT > 0)) {
+    // Only progress run animation when moving; hold standing pose during combat or channeling stops
+    if (!this.dead && speed === 0 && this.state === "run" && ((frontTarget && !frontTarget.dead && frontTarget.hp > 0) || this.rapidLockT > 0 || arcaneOrbActive)) {
       this.animT = 0;
     } else {
       this.animT += dt;
@@ -608,6 +652,65 @@ export class Game {
     if (this.boss) updateBoss(this.boss, ctx, BOSSES[this.findBossDefId()]);
     for (const p of this.projectiles) {
       updateProjectile(p, dt);
+      if (p.isArcaneOrb && !p.dead) {
+        const dir = Math.sign(p.vx) || 1;
+        this.particles.push({
+          x: p.x - dir * 0.8,
+          y: p.y + this.rng.range(-0.4, 0.4),
+          vx: -dir * 1.5 + this.rng.range(-1, 1),
+          vy: this.rng.range(-1, 1),
+          life: 0.35,
+          max: 0.35,
+          color: this.rng.pick(["#49b6ff", "#b98bff", "#ffffff", "#70d6ff"]),
+          ch: this.rng.pick(["✦", "*", "·", "✧", "°", "•"]),
+        });
+        this.particles.push({
+          x: p.x - dir * 1.6,
+          y: p.y + this.rng.range(-0.3, 0.3),
+          vx: -dir * 0.8,
+          vy: this.rng.range(-0.8, 0.8),
+          life: 0.25,
+          max: 0.25,
+          color: "#b98bff",
+          ch: "·",
+        });
+      }
+      if (p.isBombard && !p.dead) {
+        const dir = Math.sign((p.targetX ?? p.x) - (p.startX ?? p.x)) || 1;
+        this.particles.push({
+          x: p.x - dir * 0.8 + this.rng.range(-0.3, 0.3),
+          y: p.y + this.rng.range(-0.3, 0.3),
+          vx: -dir * 1.5 + this.rng.range(-0.8, 0.8),
+          vy: this.rng.range(-0.5, 1.5),
+          life: 0.35,
+          max: 0.35,
+          color: this.rng.pick(["#ff7a4a", "#ffd24b", "#ff4d4d", "#aaaaaa"]),
+          ch: this.rng.pick(["•", "*", "o", "·", "~"]),
+        });
+        this.particles.push({
+          x: p.x - dir * 1.6,
+          y: p.y + this.rng.range(-0.2, 0.2),
+          vx: -dir * 0.8,
+          vy: this.rng.range(-0.5, 0.5),
+          life: 0.25,
+          max: 0.25,
+          color: "#888888",
+          ch: "·",
+        });
+      }
+      if (p.isArrowShower && !p.dead) {
+        const dir = Math.sign((p.targetX ?? p.x) - (p.startX ?? p.x)) || 1;
+        this.particles.push({
+          x: p.x - dir * 0.6 + this.rng.range(-0.2, 0.2),
+          y: p.y + this.rng.range(-0.2, 0.2),
+          vx: -dir * 1.2 + this.rng.range(-0.5, 0.5),
+          vy: this.rng.range(-0.5, 0.5),
+          life: 0.3,
+          max: 0.3,
+          color: this.rng.pick(["#5fd17a", "#a8ffb2", "#ffffff", "#8fe0a0"]),
+          ch: this.rng.pick(["·", "°", "~", "^", "v", "✧"]),
+        });
+      }
       this.handleProj(p);
     }
     for (const p of this.particles) {
@@ -696,6 +799,7 @@ export class Game {
       }
       case "boss":
         if (!this.boss) {
+          sound.bossAppear();
           this.boss = makeBoss(s, this.world);
           this.flash = 0.6;
           this.shake(10);
@@ -745,8 +849,10 @@ export class Game {
     t.hurtT = 0.16;
     t.kb = Math.max(t.kb, 1.6);
     // damage number appears above the target's head
-    this.dmgNum(t.x, t.feetRow - 5, final, crit, color);
+    this.monsterDmgNum(t.x, t.headRow - 1, final, crit);
     this.burst(t.x, t.feetRow - 1, color ?? "#ffd24b", crit ? 7 : 4);
+    if (crit) sound.crit();
+    else sound.hit();
     this.combo++;
     this.comboTimer = 2.6;
     if (this.combo > this.run.maxCombo) this.run.maxCombo = this.combo;
@@ -871,8 +977,9 @@ export class Game {
   private basicAttack() {
     const cls = CLASSES[this.profile.classId];
     const ranged = ["ranger", "mage", "gunner"].includes(this.profile.classId);
-    this.attackTimer = 0.16;
+    this.attackTimer = ranged ? 0.16 : 0.24;
     if (ranged) {
+      sound.shoot();
       const wpn = this.profile.equipment.weapon;
       const sym = this.profile.classId === "mage" ? "*" : this.profile.classId === "gunner" ? "•" : ">";
       this.projectiles.push({
@@ -934,6 +1041,16 @@ export class Game {
     const lvlMult = 1 + lvl * 0.18;
     const baseMult = def.mult * lvlMult;
 
+    if (this.profile.classId === "bard") {
+      sound.skill("bard");
+    } else if (def.kind === "heal" || def.kind === "buff") {
+      sound.skill(def.kind);
+    } else if (def.kind === "ultimate" || id === "fireball" || id === "bombard") {
+      sound.skill("explosion");
+    } else {
+      sound.skill("magic");
+    }
+
     switch (def.kind) {
       case "strike": {
         if (id === "backstab") {
@@ -951,8 +1068,18 @@ export class Game {
       case "cleave":
       case "aoe": {
         const r = def.radius ?? 4;
-        if (id === "cleave" && this.profile.classId === "warrior") {
-          this.startSkillMotion("leap", baseMult, r, def.symbol, "#ff8a4a", "Cleave");
+        if (id === "cleave" && ["warrior", "knight", "berserker"].includes(this.profile.classId)) {
+          // Cleave leap animation is shared across melee heavy classes.
+          // Damage calculation adapts to each class:
+          // - Knight: tanky cleave based on Knight ATK/DEF
+          // - Warrior: balanced power cleave
+          // - Berserker: ferocious carnage cleave with up to +50% bonus damage at low HP!
+          let skillMult = baseMult;
+          if (this.profile.classId === "berserker") {
+            const missingHpPct = Math.max(0, (this.maxHp - this.hp) / this.maxHp);
+            skillMult *= (1 + missingHpPct * 0.5);
+          }
+          this.startSkillMotion("leap", skillMult, r, def.symbol, cls.color, "Cleave");
         } else if (id === "dissonant_chord") {
           this.aoeBlast(this.worldCol, r, baseMult, def.symbol, true);
         } else {
@@ -963,6 +1090,104 @@ export class Game {
       case "projectile": {
         if (id === "rapid_fire") {
           this.startRapidFire(baseMult, cls.color);
+          break;
+        }
+        if (id === "arcane_burst") {
+          const dir = this.facing;
+          this.projectiles.push({
+            x: this.weaponTipX(),
+            y: this.weaponY(),
+            vx: dir * 14,
+            vy: 0,
+            life: 1.4,
+            dmg: this.playerAtkValue(baseMult, true).dmg,
+            color: "#49b6ff",
+            fromPlayer: true,
+            symbol: "(❂)",
+            pierce: 1,
+            aoe: def.radius ?? 5,
+            isArcaneOrb: true,
+          });
+          this.castTimer = 0.4;
+          this.headText("ARCANE ORB!", "#49b6ff");
+          sound.skill("magic");
+          break;
+        }
+        if (id === "bombard") {
+          const tgt = this.findTarget(def.range ?? 22) ?? null;
+          const targetX = tgt ? tgt.x : this.worldCol + 18;
+          const targetY = tgt ? (tgt as Enemy).feetRow - 1.5 : this.playerFeetRow - 1.5;
+          const startX = this.weaponTipX();
+          const startY = this.weaponY();
+          const dist = Math.max(4, Math.abs(targetX - startX));
+          const totalArcTime = clamp(dist * 0.042, 0.45, 0.95);
+
+          this.projectiles.push({
+            x: startX,
+            y: startY,
+            vx: 0,
+            vy: 0,
+            life: totalArcTime + 0.15,
+            dmg: this.playerAtkValue(baseMult, true).dmg,
+            color: "#ffd24b",
+            fromPlayer: true,
+            symbol: "[●]",
+            aoe: def.radius ?? 5,
+            isBombard: true,
+            startX,
+            startY,
+            targetX,
+            targetY,
+            arcTime: 0,
+            totalArcTime,
+            arcHeight: Math.min(8, 3 + dist * 0.25),
+          });
+          this.castTimer = 0.35;
+          this.headText("BOMBARD!", "#ffd24b");
+          sound.skill("explosion");
+          break;
+        }
+        if (id === "multi_shot") {
+          const tgt = this.findTarget(def.range ?? 22) ?? null;
+          const centerTargetX = tgt ? tgt.x : this.worldCol + 18;
+          const targetY = tgt ? (tgt as Enemy).feetRow - 1 : this.playerFeetRow - 1;
+          const startX = this.weaponTipX();
+          const startY = this.weaponY();
+          const baseDist = Math.max(4, Math.abs(centerTargetX - startX));
+
+          // Launch an arcing volley of 3 arrows in spread trajectories toward the monster
+          const offsets = [-2.5, 0, 2.5];
+          const heights = [6.2, 5.0, 5.8];
+          const symbols = ["v", "v", "v"];
+
+          for (let i = 0; i < 3; i++) {
+            const targetX = centerTargetX + offsets[i];
+            const totalArcTime = clamp(baseDist * 0.038 + i * 0.05, 0.40, 0.85);
+
+            this.projectiles.push({
+              x: startX,
+              y: startY,
+              vx: 0,
+              vy: 0,
+              life: totalArcTime + 0.15,
+              dmg: this.playerAtkValue(baseMult, true).dmg,
+              color: "#5fd17a",
+              fromPlayer: true,
+              symbol: symbols[i],
+              aoe: def.radius ?? 3,
+              isArrowShower: true,
+              startX,
+              startY,
+              targetX,
+              targetY,
+              arcTime: 0,
+              totalArcTime,
+              arcHeight: heights[i],
+            });
+          }
+          this.castTimer = 0.3;
+          this.headText("ARROW SHOWER!", "#5fd17a");
+          sound.shoot();
           break;
         }
         const sym = def.symbol[0] ?? ">";
@@ -1003,16 +1228,22 @@ export class Game {
         break;
       }
       case "buff": {
-        if (id === "symphony_of_might") {
+        if (id === "blood_rage") {
+          this.buffTimer = 10;
+          this.buffAtk = 1.70;
+          this.buffCrit = 25;
+          this.headText("BLOOD RAGE!", "#ff1a1a");
+          this.bloodSplash(this.worldCol, this.playerFeetRow - 2);
+        } else if (id === "symphony_of_might") {
           this.buffTimer = 10;
           this.buffAtk = 1.40;
           this.buffCrit = 15;
           this.headText("MIGHT SYMPHONY!", "#ff6fb0");
         } else {
-          this.buffTimer = id === "blood_rage" ? 8 : 10;
-          this.buffAtk = id === "blood_rage" ? 1.7 : 1.35;
-          this.buffCrit = id === "blood_rage" ? 20 : 0;
-          this.headText(id === "blood_rage" ? "BLOOD RAGE!" : "WAR CRY!", "#ff5d5d");
+          this.buffTimer = 10;
+          this.buffAtk = 1.35;
+          this.buffCrit = 0;
+          this.headText("WAR CRY!", "#ff5d5d");
         }
         this.flash = 0.3;
         break;
@@ -1067,27 +1298,76 @@ export class Game {
     if (hit === 0) this.combo = Math.max(0, this.combo);
   }
 
+  private triggerBombardDetonation(p: Projectile) {
+    if (p.detonated) return;
+    p.detonated = true;
+    p.dead = true;
+    this.aoeBlast(p.x, p.aoe ?? 5, p.dmg / Math.max(1, this.stats.atk), "[●]", true);
+    this.shake(9);
+    this.flash = 0.4;
+    sound.skill("explosion");
+  }
+
+  private triggerArrowShowerDetonation(p: Projectile) {
+    if (p.detonated) return;
+    p.detonated = true;
+    p.dead = true;
+    this.aoeBlast(p.x, p.aoe ?? 3, p.dmg / Math.max(1, this.stats.atk), "v", false);
+    this.burst(p.x, p.y, "#5fd17a", 8);
+    sound.shoot();
+  }
+
   private handleProj(p: Projectile) {
     if (p.fromPlayer) {
       // hit enemies/boss
       for (const e of this.enemies) {
         if (e.dead) continue;
-        if (Math.abs(e.x - p.x) < 1.2 && Math.abs(e.feetRow - 1 - p.y) < 2.4) {
-          const crit = this.rng.chance(clamp(this.stats.crit, 0, 95) / 100);
-          this.dealDamage(e, p.dmg * (crit ? this.stats.critdmg / 100 : 1), crit, p.color);
-          if (p.aoe) this.aoeBlast(p.x, p.aoe, 0.0001, "*", false);
-          if ((p.pierce ?? 1) > 0) { p.pierce = (p.pierce ?? 1) - 1; }
-          else p.dead = true;
-          if (!p.dead && !p.aoe) p.dead = true;
+        if (Math.abs(e.x - p.x) < 1.4 && Math.abs(e.feetRow - 1 - p.y) < 2.8) {
+          if (p.isArrowShower) {
+            this.triggerArrowShowerDetonation(p);
+          } else if (p.isBombard) {
+            this.triggerBombardDetonation(p);
+          } else if (p.isArcaneOrb) {
+            this.aoeBlast(p.x, p.aoe ?? 5, p.dmg / Math.max(1, this.stats.atk), "✦", true);
+            this.shake(8);
+            this.flash = 0.35;
+            sound.skill("explosion");
+            p.dead = true;
+          } else {
+            const crit = this.rng.chance(clamp(this.stats.crit, 0, 95) / 100);
+            this.dealDamage(e, p.dmg * (crit ? this.stats.critdmg / 100 : 1), crit, p.color);
+            if (p.aoe) this.aoeBlast(p.x, p.aoe, 0.0001, "*", false);
+            if ((p.pierce ?? 1) > 0) { p.pierce = (p.pierce ?? 1) - 1; }
+            else p.dead = true;
+            if (!p.dead && !p.aoe) p.dead = true;
+          }
           break;
         }
       }
       if (this.boss && !this.boss.dead && !p.dead) {
         if (Math.abs(this.boss.x - p.x) < this.boss.size[0] / 2 && Math.abs(this.boss.feetRow - this.boss.size[1] / 2 - p.y) < this.boss.size[1] / 2) {
-          const crit = this.rng.chance(clamp(this.stats.crit, 0, 95) / 100);
-          this.dealDamage(this.boss, p.dmg * (crit ? this.stats.critdmg / 100 : 1), crit, p.color);
-          if (!p.aoe) p.dead = true;
+          if (p.isArrowShower) {
+            this.triggerArrowShowerDetonation(p);
+          } else if (p.isBombard) {
+            this.triggerBombardDetonation(p);
+          } else if (p.isArcaneOrb) {
+            this.aoeBlast(p.x, p.aoe ?? 5, p.dmg / Math.max(1, this.stats.atk), "✦", true);
+            this.shake(8);
+            this.flash = 0.35;
+            sound.skill("explosion");
+            p.dead = true;
+          } else {
+            const crit = this.rng.chance(clamp(this.stats.crit, 0, 95) / 100);
+            this.dealDamage(this.boss, p.dmg * (crit ? this.stats.critdmg / 100 : 1), crit, p.color);
+            if (!p.aoe) p.dead = true;
+          }
         }
+      }
+      if (p.isBombard && p.dead && !p.detonated) {
+        this.triggerBombardDetonation(p);
+      }
+      if (p.isArrowShower && p.dead && !p.detonated) {
+        this.triggerArrowShowerDetonation(p);
       }
     } else {
       // enemy projectile hits player
@@ -1123,6 +1403,36 @@ export class Game {
       });
     }
   }
+
+  private bloodSplash(x: number, y: number) {
+    const bloodColors = ["#ff0033", "#dc143c", "#ff1a1a", "#b30000", "#ff4d4d", "#e60000"];
+    const bloodChars = ["%", "&", "#", "*", "+", "x", "✦", "•", "░"];
+
+    // 40 particles exploding radially outwards in 360 degrees from Berserker's center
+    for (let i = 0; i < 40; i++) {
+      const angle = this.rng.range(0, Math.PI * 2);
+      const speed = this.rng.range(5, 15);
+      const vx = Math.cos(angle) * speed;
+      const vy = Math.sin(angle) * speed - 3;
+      const color = this.rng.pick(bloodColors);
+      const ch = this.rng.pick(bloodChars);
+
+      this.particles.push({
+        x: x + this.rng.range(-0.4, 0.4),
+        y: y + this.rng.range(-0.4, 0.4),
+        vx,
+        vy,
+        life: this.rng.range(0.5, 0.95),
+        max: 0.95,
+        color,
+        ch,
+      });
+    }
+
+    this.shake(12);
+    this.flash = 0.65;
+    sound.skill("explosion");
+  }
   // Floating damage numbers are intentionally disabled — combat feedback is
   // conveyed through hit flashes, particle bursts, shake and the TARGET HP bar.
   private dmgNum(x: number, y: number, val: number, crit: boolean, color?: string) {
@@ -1134,6 +1444,17 @@ export class Game {
       life: crit ? 1.1 : 0.85,
       text: crit ? `${val.toLocaleString("en-US")}!` : val.toLocaleString("en-US"),
       color: color ?? (crit ? "#ffd24b" : "#ffffff"),
+      size: crit ? 2 : 1,
+    });
+  }
+  private monsterDmgNum(x: number, y: number, val: number, crit: boolean) {
+    this.dmgNums.push({
+      x: x + this.rng.range(-0.4, 0.4),
+      y,
+      vy: -3.0,
+      life: crit ? 1.1 : 0.85,
+      text: crit ? `${val.toLocaleString("en-US")}!` : val.toLocaleString("en-US"),
+      color: crit ? "#ffd24b" : "#ffffff",
       size: crit ? 2 : 1,
     });
   }
@@ -1182,6 +1503,7 @@ export class Game {
     }
     // colossal golden burst marker at the corpse
     this.burst(x, feetRow - 2, "#ffd24b", rich ? 50 : 30);
+    sound.goldSplash();
   }
 
   /** Coin arc, bounce, magnet-to-hero and despawn. */
@@ -1231,6 +1553,7 @@ export class Game {
           this.grantGold(g);
           this.headText(`+${g.toLocaleString("en-US")} GOLD`, "#ffd24b");
           this.burst(p.x, p.row - 1, "#ffd24b", 4);
+          sound.coin();
         }
       }
     }
@@ -1270,6 +1593,7 @@ export class Game {
 
   private onBossDie() {
     const b = this.boss!;
+    sound.bossDie();
     this.run.bosses++;
     this.run.kills++;
     this.profile.totalKills++;
@@ -1325,6 +1649,7 @@ export class Game {
       const c = CLASSES[this.profile.classId];
       // auto-allocate growth already in stats; grant bonus allocation to ATK/HP
       this.headText(`LEVEL UP! ${this.profile.level}`, "#5fd17a");
+      sound.levelUp();
       if (this.profile.level === PET_UNLOCK_LEVEL) {
         this.headText("❖ COMPANION SANCTUM UNLOCKED!", "#ff6fb0");
       }
@@ -1455,13 +1780,20 @@ export class Game {
 
   private jump() {
     // buffered jump: fires the instant the hero is grounded (or continues a bounce)
+    sound.jump();
     this.jumpQueued = true;
   }
   private dash() {
-    if (this.dashCd <= 0) { this.dashT = DASH_TIME; this.dashCd = 1.1; this.invuln = Math.max(this.invuln, 0.25); }
+    if (this.dashCd <= 0) {
+      sound.dash();
+      this.dashT = DASH_TIME;
+      this.dashCd = 1.1;
+      this.invuln = Math.max(this.invuln, 0.25);
+    }
   }
   private potion() {
     if (this.potionCd <= 0) {
+      sound.skill("heal");
       this.potionCd = 10;
       const heal = Math.round(this.maxHp * 0.4);
       this.hp = Math.min(this.maxHp, this.hp + heal);
@@ -1471,6 +1803,7 @@ export class Game {
   }
 
   private die() {
+    sound.death();
     this.dead = true;
     this.state = "dead";
     this.shake(12);
@@ -1505,6 +1838,7 @@ export class Game {
     this.enemies = this.enemies.filter((e) => e.x - this.worldCol > 14);
     if (this.boss) this.boss.hp = Math.min(this.boss.maxHp, this.boss.hp);
     this.flash = 0.6;
+    sound.levelUp();
     this.headText("✦ REVIVED ✦", "#8be9ff");
     this.cb.onDirty?.();
     return true;
@@ -1757,10 +2091,42 @@ export class Game {
   private drawProjectiles() {
     for (const p of this.projectiles) {
       const sx = this.sx(p.x);
-      if (sx < -2 || sx > COLS + 2) continue;
-      const trail = p.fromPlayer ? "·" : "·";
-      this.grid.set(sx - Math.sign(p.vx), Math.round(p.y), trail, darken(p.color, 0.5));
-      this.grid.set(sx, Math.round(p.y), p.symbol, p.color);
+      if (sx < -4 || sx > COLS + 4) continue;
+      if (p.isArcaneOrb) {
+        const orbStr = "(❂)";
+        const dir = Math.sign(p.vx) || 1;
+        const x = Math.round(sx - Math.floor(orbStr.length / 2));
+        const y = Math.round(p.y);
+        // Energy stream trail behind the Arcane Orb
+        this.grid.text(x - dir * 3, y, "≈≈✦", darken(p.color, 0.6));
+        // Energy orb
+        this.grid.text(x, y, orbStr, p.color);
+        // Bright core
+        this.grid.set(x + 1, y, "✦", "#ffffff");
+      } else if (p.isBombard) {
+        const shellStr = "[●]";
+        const dir = Math.sign((p.targetX ?? p.x) - (p.startX ?? p.x)) || 1;
+        const x = Math.round(sx - Math.floor(shellStr.length / 2));
+        const y = Math.round(p.y);
+        // Smoke & fire tail behind the high-arcing shell
+        this.grid.text(x - dir * 3, y + 1, "~~*", darken("#ff7a4a", 0.6));
+        // Mortar shell ball
+        this.grid.text(x, y, shellStr, "#ffd24b");
+        // Glowing core
+        this.grid.set(x + 1, y, "●", "#ffffff");
+      } else if (p.isArrowShower) {
+        const arrowStr = "v";
+        const dir = Math.sign((p.targetX ?? p.x) - (p.startX ?? p.x)) || 1;
+        const x = Math.round(sx);
+        const y = Math.round(p.y);
+        // Feather/wind trail stream behind each arcing arrow in the shower
+        this.grid.text(x - dir * 2, y - 1, "°~", darken("#5fd17a", 0.6));
+        this.grid.text(x, y, arrowStr, "#5fd17a");
+      } else {
+        const trail = p.fromPlayer ? "·" : "·";
+        this.grid.set(sx - Math.sign(p.vx), Math.round(p.y), trail, darken(p.color, 0.5));
+        this.grid.set(sx, Math.round(p.y), p.symbol, p.color);
+      }
     }
   }
 
@@ -1775,7 +2141,13 @@ export class Game {
     else state = "run";
 
     const frames = PLAYER_FRAMES[state] ?? PLAYER_FRAMES.idle;
-    const fi = state === "run" ? Math.floor(this.animT * 9) % frames.length : this.attackTimer > 0 ? Math.floor((0.16 - this.attackTimer) * 30) % frames.length : 0;
+    const isRangedClass = ["ranger", "mage", "gunner"].includes(this.profile.classId);
+    const attackDuration = isRangedClass ? 0.16 : 0.24;
+    const fi = state === "run"
+      ? Math.floor(this.animT * 9) % frames.length
+      : state === "attack"
+      ? Math.min(frames.length - 1, Math.floor((1 - Math.max(0, this.attackTimer / attackDuration)) * frames.length))
+      : 0;
     const art = frames[fi] ?? frames[0];
 
     const head = cls.headGlyph;
@@ -1793,16 +2165,121 @@ export class Game {
     const tint: Record<string, string> = { [head]: headColor, [body]: bodyColor };
     this.grid.blitTinted(art, sx - 2, y0, cls.color, tint);
 
-    // weapon overlay — drawn at hand level (the "/B\" row) where it was originally
+    // weapon overlay & dynamic attack swing animation
     if (wpn && !this.dead) {
       const wy = y0 + 1;
-      if (state === "attack") this.grid.text(sx + 2, wy, "====>", wpnColor);
-      else this.grid.text(sx + 2, wy, cls.weaponGlyph, wpnColor);
+      const glyph = wpn.name ? wpn.name.split(" ").pop() ?? cls.weaponGlyph : cls.weaponGlyph;
+
+      if (this.motionType === "leap" && this.motionPhase === "move") {
+        // Warrior Cleave Leap: sword points UPWARD during jump ascent & peak, then back to original before landing
+        const leapDuration = Math.min(0.9, 0.30 + Math.max(1, Math.abs(this.motionTargetX - this.motionStartX)) * 0.045);
+        const p = Math.min(1, this.motionT / leapDuration);
+        const dir = this.facing;
+
+        if (p < 0.70) {
+          // Hand raised high beside head, towering sword pointing UPWARD into the sky
+          if (dir === 1) {
+            this.grid.set(sx + 2, y0 - 2, "▲", "#ffffff");
+            this.grid.set(sx + 2, y0 - 1, "║", wpnColor);
+            this.grid.set(sx + 2, y0, "║", wpnColor);
+            this.grid.set(sx + 1, y0, "\\", cls.color);
+          } else {
+            this.grid.set(sx - 2, y0 - 2, "▲", "#ffffff");
+            this.grid.set(sx - 2, y0 - 1, "║", wpnColor);
+            this.grid.set(sx - 2, y0, "║", wpnColor);
+            this.grid.set(sx - 1, y0, "/", cls.color);
+          }
+        } else {
+          // Back to original horizontal stance just before landing
+          if (dir === -1) {
+            const flippedWpn = cls.weaponGlyph
+              .split("")
+              .reverse()
+              .map((ch) => (ch === ">" ? "<" : ch === "<" ? ">" : ch === "]" ? "[" : ch === "[" ? "]" : ch))
+              .join("");
+            this.grid.text(sx - 2 - flippedWpn.length, wy, flippedWpn, wpnColor);
+          } else {
+            this.grid.text(sx + 2, wy, cls.weaponGlyph, wpnColor);
+          }
+        }
+      } else if (state === "attack") {
+        const progress = Math.min(1, Math.max(0, 1 - (this.attackTimer / attackDuration)));
+        const dir = this.facing;
+
+        if (isRangedClass) {
+          // Ranged recoil + muzzle flash
+          if (dir === 1) {
+            this.grid.text(sx + 2, wy, glyph, wpnColor);
+            this.grid.set(sx + 2 + glyph.length, wy, "*", "#ffffff");
+          } else {
+            const flipped = glyph.split("").reverse().map((ch) => (ch === ">" ? "<" : ch === "<" ? ">" : ch)).join("");
+            this.grid.text(sx - 2 - flipped.length, wy, flipped, wpnColor);
+            this.grid.set(sx - 3 - flipped.length, wy, "*", "#ffffff");
+          }
+        } else {
+          // Melee Sword Swing Animation — Compact 3-frame arc (/ -> — -> \)
+          const wpnShape = cls.weaponGlyph;
+          if (dir === 1) {
+            // Facing Right
+            if (progress < 0.33) {
+              // Phase 1: Upward angled chamber
+              this.grid.text(sx + 2, wy - 1, ` /${wpnShape.slice(1)}`, wpnColor);
+            } else if (progress < 0.66) {
+              // Phase 2: Crisp horizontal slash + spark
+              this.grid.text(sx + 2, wy, wpnShape, wpnColor);
+              this.grid.set(sx + 2 + wpnShape.length, wy, ")", "#ffffff");
+            } else {
+              // Phase 3: Downward follow-through
+              this.grid.text(sx + 2, wy + 1, ` \\${wpnShape.slice(1)}`, wpnColor);
+            }
+          } else {
+            // Facing Left
+            const flipped = wpnShape
+              .split("")
+              .reverse()
+              .map((ch) => (ch === ">" ? "<" : ch === "<" ? ">" : ch === "]" ? "[" : ch === "[" ? "]" : ch))
+              .join("");
+            if (progress < 0.33) {
+              // Phase 1: Upward angled chamber (Left)
+              const str = `${flipped.slice(0, -1)}\\ `;
+              this.grid.text(sx - 2 - str.length, wy - 1, str, wpnColor);
+            } else if (progress < 0.66) {
+              // Phase 2: Crisp horizontal slash (Left) + spark
+              this.grid.text(sx - 2 - flipped.length, wy, flipped, wpnColor);
+              this.grid.set(sx - 3 - flipped.length, wy, "(", "#ffffff");
+            } else {
+              // Phase 3: Downward follow-through (Left)
+              const str = `${flipped.slice(0, -1)}/ `;
+              this.grid.text(sx - 2 - str.length, wy + 1, str, wpnColor);
+            }
+          }
+        }
+      } else {
+        // Idle / Running / Jumping Stance
+        if (this.facing === -1) {
+          const flippedWpn = cls.weaponGlyph
+            .split("")
+            .reverse()
+            .map((ch) => (ch === ">" ? "<" : ch === "<" ? ">" : ch === "]" ? "[" : ch === "[" ? "]" : ch === "}" ? "{" : ch === "{" ? "}" : ch))
+            .join("");
+          this.grid.text(sx - 2 - flippedWpn.length, wy, flippedWpn, wpnColor);
+        } else {
+          this.grid.text(sx + 2, wy, cls.weaponGlyph, wpnColor);
+        }
+      }
     }
     // buff aura
     if (this.buffTimer > 0) {
-      this.grid.set(sx - 3, y0, ">", "#ff5d5d");
-      this.grid.set(sx + 3, y0, "<", "#ff5d5d");
+      if (this.profile.classId === "berserker") {
+        // Flaming Blood Rage aura around Berserker
+        this.grid.set(sx - 3, y0, "»", "#ff0033");
+        this.grid.set(sx + 3, y0, "«", "#ff0033");
+        this.grid.set(sx - 3, y0 + 1, "✦", "#dc143c");
+        this.grid.set(sx + 3, y0 + 1, "✦", "#dc143c");
+      } else {
+        this.grid.set(sx - 3, y0, ">", "#ff5d5d");
+        this.grid.set(sx + 3, y0, "<", "#ff5d5d");
+      }
     }
     // dash trail
     if (this.dashT > 0) this.grid.text(sx - 5, y0 + 1, ">>", darken(cls.color, 0.5));

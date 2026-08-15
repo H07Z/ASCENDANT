@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CLASS_LIST, CLASSES, PLAYER_FRAMES, SKILLS } from "./game/content";
 import { combatPower, newProfile, totalStats } from "./game/profile";
 import { MAX_CHARACTERS, deleteProfile, listProfiles, saveProfile } from "./game/save";
+import { sound } from "./game/audio";
 import { type Profile, STAT_LABEL, STAT_ORDER } from "./game/types";
 import { difficultyTier } from "./game/world";
 import GameView from "./components/GameView";
@@ -15,9 +16,24 @@ export default function App() {
 
   const refreshRoster = () => setRoster(listProfiles());
 
+  const [soundOn, setSoundOn] = useState(() => sound.isEnabled());
+
   useEffect(() => {
     refreshRoster();
   }, []);
+
+  useEffect(() => {
+    if (screen !== "play") {
+      sound.playBgm("title");
+    }
+  }, [screen]);
+
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    sound.setEnabled(next);
+    if (profile) profile.sound = next;
+  };
 
   const startNew = (p: Profile) => {
     saveProfile(p); // adds a new slot; existing characters untouched
@@ -51,6 +67,8 @@ export default function App() {
   return (
     <MenuScreen
       roster={roster}
+      soundOn={soundOn}
+      onToggleSound={toggleSound}
       onNew={() => setScreen("create")}
       onPlay={playCharacter}
       onDelete={removeCharacter}
@@ -61,11 +79,15 @@ export default function App() {
 // ---------------- MENU / CHARACTER ROSTER ----------------
 function MenuScreen({
   roster,
+  soundOn,
+  onToggleSound,
   onNew,
   onPlay,
   onDelete,
 }: {
   roster: Profile[];
+  soundOn: boolean;
+  onToggleSound: () => void;
   onNew: () => void;
   onPlay: (p: Profile) => void;
   onDelete: (id: string) => void;
@@ -77,6 +99,24 @@ function MenuScreen({
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#05060a] text-cyan-100">
       <Backdrop />
+
+      {/* sound toggle top-right */}
+      <div className="absolute right-3 top-3 z-30">
+        <button
+          onClick={() => {
+            sound.click();
+            onToggleSound();
+          }}
+          className={`border px-3 py-1.5 text-xs uppercase tracking-widest transition-colors ${
+            soundOn
+              ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-300"
+              : "border-slate-600 bg-slate-900/80 text-slate-500"
+          }`}
+        >
+          {soundOn ? "🔊 Sound: ON" : "🔇 Sound: OFF"}
+        </button>
+      </div>
+
       <div className="term-scroll relative z-10 flex h-full flex-col items-center overflow-y-auto px-4 py-6">
         <pre className="mb-1 text-center text-[9px] leading-none text-cyan-400/70 sm:text-sm">
 {`   █████╗ ███████╗██████╗ ███╗   ██╗███████╗██╗████████╗
@@ -130,13 +170,19 @@ function MenuScreen({
                     </div>
                   </div>
                   <button
-                    onClick={() => onPlay(p)}
+                    onClick={() => {
+                      sound.click();
+                      onPlay(p);
+                    }}
                     className="border border-emerald-500/50 px-3 py-1.5 text-[11px] uppercase tracking-wider text-emerald-300 hover:bg-emerald-500/10"
                   >
                     ▶ play
                   </button>
                   <button
-                    onClick={() => setConfirmId(p.id)}
+                    onClick={() => {
+                      sound.click();
+                      setConfirmId(p.id);
+                    }}
                     className="border border-rose-500/30 px-2 py-1.5 text-[11px] text-rose-400/70 hover:bg-rose-500/10 hover:text-rose-300"
                     title="Delete character"
                   >
@@ -239,7 +285,10 @@ function BigBtn({
 }) {
   return (
     <button
-      onClick={onClick}
+      onClick={() => {
+        if (!disabled) sound.click();
+        onClick();
+      }}
       disabled={disabled}
       className={`group relative w-full overflow-hidden border px-6 py-3 text-sm uppercase tracking-[0.25em] transition-all ${
         disabled ? "cursor-not-allowed opacity-40" : "hover:tracking-[0.35em]"
@@ -272,7 +321,10 @@ function CreateScreen({ onCreate, onBack }: { onCreate: (p: Profile) => void; on
           <input
             value={name}
             maxLength={14}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              sound.click();
+              setName(e.target.value);
+            }}
             placeholder="enter a name..."
             className="flex-1 border-b border-cyan-700/40 bg-transparent px-2 py-1 text-sm text-cyan-200 outline-none placeholder:text-slate-600 focus:border-amber-400"
           />
@@ -280,7 +332,15 @@ function CreateScreen({ onCreate, onBack }: { onCreate: (p: Profile) => void; on
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {CLASS_LIST.map((c) => (
-            <ClassCard key={c.id} def={c} active={classId === c.id} onSelect={() => setClassId(c.id)} />
+            <ClassCard
+              key={c.id}
+              def={c}
+              active={classId === c.id}
+              onSelect={() => {
+                sound.click();
+                setClassId(c.id);
+              }}
+            />
           ))}
         </div>
 
@@ -291,6 +351,7 @@ function CreateScreen({ onCreate, onBack }: { onCreate: (p: Profile) => void; on
             onClick={() => {
               const nm = name.trim();
               if (!nm) return;
+              sound.characterCreate();
               onCreate(newProfile(nm, classId));
             }}
           >

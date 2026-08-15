@@ -32,6 +32,7 @@ export interface Enemy {
   kind: "enemy";
   x: number; // world col
   feetRow: number;
+  headRow: number;
   vy: number;
   hp: number;
   maxHp: number;
@@ -69,6 +70,7 @@ export function makeEnemy(spawn: { x: number; enemyId: string; elite: boolean; l
     kind: "enemy",
     x: spawn.x,
     feetRow: world.groundAt(Math.round(spawn.x)) - 1,
+    headRow: world.groundAt(Math.round(spawn.x)) - 4,
     vy: 0,
     hp: Math.round(d.hp * diff.hp * (1 + spawn.level * 0.12) * eliteMul),
     maxHp: Math.round(d.hp * diff.hp * (1 + spawn.level * 0.12) * eliteMul),
@@ -251,6 +253,7 @@ export function updateEnemy(e: Enemy, ctx: CombatCtx) {
     // turret: stationary
     e.feetRow = ctx.groundAt(Math.round(e.x)) - 1;
   }
+  e.headRow = e.feetRow - enemyFrames(e).length;
 
   // ---- monster special skills -----------------------------
   if (e.skillTier > 0) updateEnemySkill(e, ctx, dist, rageMul);
@@ -299,6 +302,7 @@ export interface Boss {
   kind: "boss";
   x: number;
   feetRow: number;
+  headRow: number;
   homeX: number;
   hp: number;
   maxHp: number;
@@ -336,6 +340,7 @@ export function makeBoss(spawn: { x: number; bossId: string; regionIdx: number; 
     x: spawn.x,
     homeX: spawn.x,
     feetRow: world.groundAt(Math.round(spawn.x)) - 1,
+    headRow: world.groundAt(Math.round(spawn.x)) - 1 - (d?.size[1] ?? 8),
     hp: Math.round(d.hp * (1 + spawn.level * 0.05) * scale),
     maxHp: Math.round(d.hp * (1 + spawn.level * 0.05) * scale),
     ghostHp: Math.round(d.hp * (1 + spawn.level * 0.05) * scale),
@@ -403,6 +408,7 @@ export function updateBoss(b: Boss, ctx: CombatCtx, def: { attacks: { kind: stri
     if (Math.abs(dx) > 0.3) b.x += Math.sign(dx) * Math.min(1.5 * dt, Math.abs(dx));
     b.feetRow = ctx.groundAt(Math.round(b.x)) - 1;
   }
+  b.headRow = b.feetRow - bossFrames(b).length;
 
   // attack scheduling
   if (!b.action) {
@@ -492,11 +498,33 @@ export interface Projectile {
   aoe?: number;
   pierce?: number;
   dead?: boolean;
+  detonated?: boolean;
+  isArcaneOrb?: boolean;
+  isBombard?: boolean;
+  isArrowShower?: boolean;
+  startX?: number;
+  startY?: number;
+  targetX?: number;
+  targetY?: number;
+  arcTime?: number;
+  totalArcTime?: number;
+  arcHeight?: number;
 }
 
 export function updateProjectile(p: Projectile, dt: number) {
-  p.x += p.vx * dt;
-  p.y += p.vy * dt;
+  if ((p.isBombard || p.isArrowShower) && p.startX !== undefined && p.targetX !== undefined && p.totalArcTime) {
+    p.arcTime = (p.arcTime ?? 0) + dt;
+    const progress = Math.min(1, p.arcTime / p.totalArcTime);
+    p.x = p.startX + (p.targetX - p.startX) * progress;
+    const arc = Math.sin(Math.PI * progress) * (p.arcHeight ?? 6);
+    p.y = (p.startY ?? p.y) + ((p.targetY ?? p.y) - (p.startY ?? p.y)) * progress - arc;
+    if (progress >= 1 || p.arcTime >= p.totalArcTime) {
+      p.dead = true;
+    }
+  } else {
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+  }
   p.life -= dt;
   if (p.life <= 0) p.dead = true;
 }
