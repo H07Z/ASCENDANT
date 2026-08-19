@@ -2,6 +2,11 @@ import { useEffect, useState } from "react";
 import {
   ACHIEVEMENTS,
   CLASSES,
+  COSTUME_GACHA_RATES,
+  COSTUME_PITY,
+  COSTUME_PULL10_COST,
+  COSTUME_PULL_COST,
+  COSTUMES,
   PETS,
   PET_GACHA_RATES,
   PET_LIST,
@@ -14,7 +19,7 @@ import {
   SKILLS,
   petStarMult,
 } from "../game/content";
-import { type PullResult, combatPower, expForLevel, starUpCost, totalStats } from "../game/profile";
+import { type CostumePullResult, type PullResult, combatPower, expForLevel, starUpCost, totalStats } from "../game/profile";
 import { sound } from "../game/audio";
 import {
   type Item,
@@ -141,12 +146,26 @@ function itemLine(it: Item | null) {
 }
 
 // ---------- Character ----------
-export function CharacterPanel({ profile, onClose }: { profile: Profile; onClose: () => void }) {
+export function CharacterPanel({
+  profile,
+  onEquip,
+  onEquipCostume,
+  onStarUp,
+  onClose,
+}: {
+  profile: Profile;
+  onEquip: (id: string | null) => void;
+  onEquipCostume: (id: string | null) => void;
+  onStarUp: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [tab, setTab] = useState<"stats" | "pets" | "costumes">("stats");
   const stats = totalStats(profile);
   const cls = CLASSES[profile.classId];
   const need = expForLevel(profile.level);
+
   return (
-    <Panel title="CHARACTER" onClose={onClose} accent="#7fd0ff">
+    <Panel title="CHARACTER" onClose={onClose} accent="#7fd0ff" width="max-w-4xl">
       <div className="grid gap-4 md:grid-cols-[200px_1fr]">
         <div className="flex flex-col items-center gap-2 border border-white/10 bg-black/40 p-3">
           {heroArt(profile)}
@@ -163,29 +182,146 @@ export function CharacterPanel({ profile, onClose }: { profile: Profile; onClose
             <div className="text-[10px] text-slate-500">COMBAT POWER</div>
             <div className="text-xl font-bold text-amber-300 glow-strong">{combatPower(stats).toLocaleString()}</div>
           </div>
+          <div className="mt-4 flex w-full flex-col gap-1">
+            <Btn color={tab === "stats" ? "#7fd0ff" : "#6a7a8a"} onClick={() => setTab("stats")}>
+              ▤ Stats
+            </Btn>
+            <Btn color={tab === "pets" ? "#ff6fb0" : "#6a7a8a"} onClick={() => setTab("pets")}>
+              ❖ Pets
+            </Btn>
+            <Btn color={tab === "costumes" ? "#ffd24b" : "#6a7a8a"} onClick={() => setTab("costumes")}>
+              ♜ Costumes
+            </Btn>
+          </div>
         </div>
+
         <div>
-          <div className="mb-2 text-xs tracking-widest text-slate-400">▮ ATTRIBUTES</div>
-          <div className="grid grid-cols-2 gap-x-6">
-            {STAT_ORDER.map((k) => (
-              <StatRow
-                key={k}
-                label={STAT_LABEL[k]}
-                value={fmtStat(k, stats[k])}
-                color={k === "hp" ? "#ff8a6a" : k === "mp" ? "#5fb0ff" : "#cfe0f0"}
-              />
-            ))}
-          </div>
-          <div className="mt-3 mb-1 text-xs tracking-widest text-slate-400">▮ EXPERIENCE</div>
-          <div className="h-3 w-full border border-white/10 bg-black/40">
-            <div
-              className="h-full bg-emerald-500/70"
-              style={{ width: `${Math.min(100, (profile.exp / need) * 100)}%` }}
-            />
-          </div>
-          <div className="text-[10px] text-slate-400">
-            {profile.exp.toLocaleString()} / {need.toLocaleString()} XP
-          </div>
+          {tab === "stats" && (
+            <div>
+              <div className="mb-2 text-xs tracking-widest text-slate-400">▮ ATTRIBUTES</div>
+              <div className="grid grid-cols-2 gap-x-6">
+                {STAT_ORDER.map((k) => (
+                  <StatRow
+                    key={k}
+                    label={STAT_LABEL[k]}
+                    value={fmtStat(k, stats[k])}
+                    color={k === "hp" ? "#ff8a6a" : k === "mp" ? "#5fb0ff" : "#cfe0f0"}
+                  />
+                ))}
+              </div>
+              <div className="mt-3 mb-1 text-xs tracking-widest text-slate-400">▮ EXPERIENCE</div>
+              <div className="h-3 w-full border border-white/10 bg-black/40">
+                <div
+                  className="h-full bg-emerald-500/70"
+                  style={{ width: `${Math.min(100, (profile.exp / need) * 100)}%` }}
+                />
+              </div>
+              <div className="text-[10px] text-slate-400">
+                {profile.exp.toLocaleString()} / {need.toLocaleString()} XP
+              </div>
+            </div>
+          )}
+
+          {tab === "pets" && (
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-[11px] text-slate-400">Equip a companion to fight beside you.</div>
+                {profile.activePet && (
+                  <Btn color="#8a94a0" onClick={() => onEquip(null)}>
+                    unequip
+                  </Btn>
+                )}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {profile.pets.length === 0 && (
+                  <div className="text-xs text-slate-600">No companions bound yet. Try a summon from the Gacha!</div>
+                )}
+                {profile.pets.map((op) => {
+                  const def = PETS[op.id];
+                  if (!def) return null;
+                  const active = profile.activePet === op.id;
+                  const cost = starUpCost(op.star);
+                  const mult = petStarMult(op.star);
+                  return (
+                    <div
+                      key={op.id}
+                      className="border bg-black/30 p-2"
+                      style={{
+                        borderColor: active ? def.color : rarityColor(def.rarity) + "44",
+                        boxShadow: active ? `0 0 18px ${def.color}33` : "none",
+                      }}
+                    >
+                      <div className="flex items-start gap-2">
+                        <pre className="text-[8px] leading-none" style={{ color: def.color }}>
+                          {def.art.join("\n")}
+                        </pre>
+                        <div className="flex-1">
+                          <div className="text-xs glow" style={{ color: rarityColor(def.rarity) }}>
+                            {def.name}
+                          </div>
+                          <div className="text-[9px] uppercase tracking-widest text-slate-500">
+                            {def.rarity} · {def.element}
+                          </div>
+                          <div className="text-[10px] text-amber-300">
+                            {"★".repeat(op.star)}<span className="text-slate-700">{"★".repeat(PET_MAX_STAR - op.star)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-1 text-[10px] text-slate-400">{def.desc}</div>
+                      <div className="mt-1 text-[10px] text-slate-300">
+                        DMG {(def.atkMult * mult * 100).toFixed(0)}% ATK · CD {def.cd.toFixed(1)}s · RNG {def.range}
+                      </div>
+                      <div className="text-[10px] text-emerald-300">
+                        {Object.entries(def.bonus)
+                          .map(([k, v]) => `${STAT_LABEL[k as keyof typeof STAT_LABEL]}+${fmtStat(k, (v as number) * mult)}`)
+                          .join("  ")}
+                      </div>
+                      <div className="mt-2 flex gap-1">
+                        <Btn color={active ? "#5fd17a" : def.color} disabled={active} onClick={() => onEquip(op.id)}>
+                          {active ? "equipped" : "equip"}
+                        </Btn>
+                        <Btn
+                          color="#7fd0ff"
+                          disabled={op.star >= PET_MAX_STAR || profile.petShards < cost}
+                          onClick={() => onStarUp(op.id)}
+                        >
+                          {op.star >= PET_MAX_STAR ? "max ★" : `★ up · ${cost}✧`}
+                        </Btn>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {tab === "costumes" && (
+            <div>
+              <div className="mb-2 text-[11px] text-slate-400">
+                Unlock original ASCII looks and small stat bonuses. Equip to change the hero's style.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {profile.costumes.length === 0 && <span className="text-xs text-slate-600">No costumes yet. Draw from the Veilwardrobe.</span>}
+                {profile.costumes.map((owned) => {
+                  const c = COSTUMES[owned.id];
+                  if (!c) return null;
+                  const active = profile.activeCostume === c.id;
+                  return (
+                    <div key={c.id} className="border bg-black/40 p-2 text-center" style={{ borderColor: active ? c.color : rarityColor(c.rarity) + "55" }}>
+                      <pre className="text-[8px] leading-none" style={{ color: c.color }}>{c.art.join("\n")}</pre>
+                      <div className="text-[10px]" style={{ color: rarityColor(c.rarity) }}>{c.name}</div>
+                      <Btn color={active ? "#5fd17a" : c.color} disabled={active} onClick={() => onEquipCostume(c.id)}>{active ? "equipped" : "wear"}</Btn>
+                    </div>
+                  );
+                })}
+              </div>
+              {profile.activeCostume && (
+                <div className="mt-2">
+                  <Btn color="#8a94a0" onClick={() => onEquipCostume(null)}>unequip costume</Btn>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </Panel>
@@ -426,8 +562,9 @@ export function SummonAnimation({
                 results.length === 1 ? "items-center" : "max-w-4xl"
               }`}
             >
-              {results.slice(0, shown).map((r, i) => {
-                const def = PETS[r.petId];
+              {results.slice(0, shown).map((r: any, i) => {
+                const def = r.petId ? PETS[r.petId] : COSTUMES[r.costumeId];
+                if (!def) return null;
                 const rc = rarityColor(r.rarity);
                 const hi = RARITY_ORDER.indexOf(r.rarity) >= 4;
                 return (
@@ -448,7 +585,7 @@ export function SummonAnimation({
                     </div>
                     <div className="text-[9px]" style={{ color: rc }}>{r.rarity}</div>
                     <div className="text-[9px] text-slate-500">
-                      {r.duplicate ? `DUPE ★${r.star} +${r.shards}✧` : "✦ NEW ✦"}
+                      {r.duplicate ? (r.petId ? `DUPE ★${r.star} +${r.shards}✧` : `DUPE · Lv${r.level}`) : "✦ NEW ✦"}
                     </div>
                   </div>
                 );
@@ -468,25 +605,140 @@ export function SummonAnimation({
   );
 }
 
-// ---------- Pets / Gacha ----------
+export function CostumeRevealAnimation({
+  results,
+  onDone,
+}: {
+  results: CostumePullResult[];
+  onDone: () => void;
+}) {
+  const [phase, setPhase] = useState<"charge" | "burst" | "reveal">("charge");
+  const [tick, setTick] = useState(0);
+  const [shown, setShown] = useState(0);
+
+  const best = results.reduce(
+    (a, b) => (RARITY_ORDER.indexOf(b.rarity) > RARITY_ORDER.indexOf(a.rarity) ? b : a),
+    results[0]
+  );
+  const bestIdx = RARITY_ORDER.indexOf(best.rarity);
+  const bestColor = rarityColor(best.rarity);
+  const chargeMs = 800 + bestIdx * 150;
+
+  useEffect(() => {
+    const iv = window.setInterval(() => setTick((t) => t + 1), 80);
+    const t1 = window.setTimeout(() => setPhase("burst"), chargeMs);
+    const t2 = window.setTimeout(() => setPhase("reveal"), chargeMs + 400);
+    return () => {
+      window.clearInterval(iv);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [chargeMs]);
+
+  useEffect(() => {
+    if (phase !== "reveal") return;
+    if (shown >= results.length) return;
+    const t = window.setTimeout(() => setShown((s) => s + 1), 100);
+    return () => window.clearTimeout(t);
+  }, [phase, shown, results.length]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4 backdrop-blur-sm"
+      style={{ background: phase === "burst" ? `${bestColor}33` : "rgba(0,0,0,0.9)" }}
+    >
+      <div className="w-full max-w-3xl text-center">
+        {phase !== "reveal" && (
+          <div>
+            <div
+              className="mx-auto flex h-24 w-16 items-center justify-center border"
+              style={{
+                borderColor: phase === "burst" ? "#ffffff" : bestColor,
+                boxShadow: `0 0 ${phase === "burst" ? 40 : 10 + bestIdx * 5}px ${bestColor}`,
+                transform: phase === "burst" ? "scale(1.2)" : `scale(${1 + tick * 0.02})`,
+                transition: "all 150ms ease-out",
+              }}
+            >
+              <span className="text-3xl" style={{ color: phase === "burst" ? "#ffffff" : bestColor }}>?</span>
+            </div>
+            <div className="mt-6 text-xs tracking-[0.45em]" style={{ color: bestColor }}>
+              {phase === "burst" ? "NEW STYLE UNLOCKED!" : "WEAVING THREADS..."}
+            </div>
+          </div>
+        )}
+
+        {phase === "reveal" && (
+          <div>
+            <div className="mb-4 text-sm tracking-[0.35em] glow" style={{ color: bestColor }}>
+              WARDROBE REVEALED
+            </div>
+            <div
+              className={`mx-auto flex flex-wrap justify-center gap-3 ${
+                results.length === 1 ? "items-center" : "max-w-4xl"
+              }`}
+            >
+              {results.slice(0, shown).map((r, i) => {
+                const c = COSTUMES[r.costumeId];
+                if (!c) return null;
+                const rc = rarityColor(r.rarity);
+                const hi = RARITY_ORDER.indexOf(r.rarity) >= 4;
+                return (
+                  <div
+                    key={i}
+                    className="flex min-w-[150px] flex-col items-center justify-center border bg-black/80 p-3 text-center"
+                    style={{
+                      borderColor: rc,
+                      boxShadow: hi ? `0 0 24px ${rc}99` : `0 0 10px ${rc}55`,
+                      animation: "popIn 250ms ease-out",
+                    }}
+                  >
+                    <pre className="mb-2 text-[10px] leading-none" style={{ color: c.color }}>
+                      {c.art.join("\n")}
+                    </pre>
+                    <div className="text-xs glow" style={{ color: rc }}>
+                      {c.name}
+                    </div>
+                    <div className="mt-1 text-[9px]" style={{ color: rc }}>{r.rarity}</div>
+                    <div className="text-[9px] text-slate-400">
+                      {r.duplicate ? `DUPLICATE · Lv${r.level}` : "✦ NEW STYLE ✦"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {shown >= results.length && (
+              <div className="mt-6">
+                <Btn color={bestColor} onClick={onDone}>
+                  ▶ continue
+                </Btn>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Gacha ----------
 export function PetPanel({
   profile,
   results,
   onPull,
-  onEquip,
-  onStarUp,
+  onCostumePull,
   onClose,
   msg,
 }: {
   profile: Profile;
   results: PullResult[];
   onPull: (count: number) => void;
-  onEquip: (id: string | null) => void;
-  onStarUp: (id: string) => void;
+  onCostumePull: (count: number) => void;
   onClose: () => void;
   msg: string;
 }) {
-  const [tab, setTab] = useState<"summon" | "collection">("summon");
+  const [tab, setTab] = useState<"gacha" | "costumes">("gacha");
+  const [showSummonAnim, setShowSummonAnim] = useState<PullResult[] | null>(null);
+  const [showCostumeAnim, setShowCostumeAnim] = useState<CostumePullResult[] | null>(null);
   const locked = profile.level < PET_UNLOCK_LEVEL;
 
   if (locked) {
@@ -528,20 +780,53 @@ export function PetPanel({
       </div>
 
       <div className="mb-3 flex flex-wrap gap-2">
-        {(["summon", "collection"] as const).map((t) => (
+        {(["gacha", "costumes"] as const).map((t) => (
           <Btn key={t} color={tab === t ? "#ff6fb0" : "#6a7a8a"} onClick={() => setTab(t)}>
-            {t === "summon" ? "✦ Summon" : "❖ Collection"}
+            {t === "gacha" ? "✦ Gacha" : "♜ Costume Gacha"}
           </Btn>
         ))}
       </div>
 
       {msg && <div className="mb-2 border border-fuchsia-500/30 bg-fuchsia-500/10 px-2 py-1 text-xs text-fuchsia-200">{msg}</div>}
 
-      {tab === "summon" && (
+      {tab === "costumes" && (
+        <div>
+          <div className="mb-3 border border-amber-500/30 bg-amber-500/5 p-3 text-center">
+            <div className="text-sm tracking-[0.2em] text-amber-300 glow">♜ VEILWARDROBE GACHA</div>
+            <div className="mt-1 text-[11px] text-slate-400">Draw new ASCII looks. Equip & star-up your wardrobe in the Character tab.</div>
+            <div className="mt-2 text-xs text-orange-300">{profile.spiritOrbs ?? 0} ❂ Spirit Orbs · Pity {profile.costumePity}/{COSTUME_PITY}</div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="border border-amber-500/30 bg-black/30 p-3">
+              <div className="text-sm text-amber-300 glow">Single Wardrobe Pull</div>
+              <div className="mt-1 text-[11px] text-slate-400">Reveal a new silhouette for your hero.</div>
+              <Btn color="#ffd24b" disabled={(profile.spiritOrbs ?? 0) < COSTUME_PULL_COST} onClick={() => onCostumePull(1)}>
+                draw · {COSTUME_PULL_COST} ❂
+              </Btn>
+            </div>
+            <div className="border border-fuchsia-500/30 bg-black/30 p-3">
+              <div className="text-sm text-fuchsia-300 glow">Ten Wardrobe Pull</div>
+              <div className="mt-1 text-[11px] text-slate-400">A discounted style ritual with the same pet rarity rates.</div>
+              <Btn color="#ff6fb0" disabled={(profile.spiritOrbs ?? 0) < COSTUME_PULL10_COST} onClick={() => onCostumePull(10)}>
+                draw ×10 · {COSTUME_PULL10_COST} ❂
+              </Btn>
+            </div>
+          </div>
+          <div className="mt-3 border border-white/10 bg-black/30 p-2 text-[10px]">
+            <div className="mb-1 uppercase tracking-widest text-slate-500">▮ Wardrobe Rates</div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {RARITY_ORDER.map((r) => <span key={r} style={{ color: rarityColor(r) }}>{r} {COSTUME_GACHA_RATES[r]}%</span>)}
+            </div>
+            <div className="mt-1 text-slate-500">Same rates as Pet Gacha · guaranteed LEGENDARY+ within {COSTUME_PITY} pulls. Equip & manage your wardrobe in the Character tab.</div>
+          </div>
+        </div>
+      )}
+
+      {tab === "gacha" && (
         <div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="border border-fuchsia-500/30 bg-black/30 p-3">
-              <div className="text-sm glow text-fuchsia-300">Single Summon</div>
+              <div className="text-sm glow text-fuchsia-300">Pet Gacha · Single</div>
               <div className="mt-1 text-[11px] text-slate-400">Bind one companion from the aether.</div>
               <div className="mt-2">
                 <Btn color="#ff6fb0" disabled={(profile.spiritOrbs ?? 0) < PET_PULL_COST} onClick={() => onPull(1)}>
@@ -550,7 +835,7 @@ export function PetPanel({
               </div>
             </div>
             <div className="border border-amber-500/40 bg-black/30 p-3">
-              <div className="text-sm glow text-amber-300">Ten Summon</div>
+              <div className="text-sm glow text-amber-300">Pet Gacha · Ten</div>
               <div className="mt-1 text-[11px] text-slate-400">Discounted ×10 ritual. Better odds overall.</div>
               <div className="mt-2">
                 <Btn color="#ffd24b" disabled={(profile.spiritOrbs ?? 0) < PET_PULL10_COST} onClick={() => onPull(10)}>
@@ -561,16 +846,16 @@ export function PetPanel({
           </div>
 
           {/* rates */}
-          <div className="mt-3 border border-white/10 bg-black/30 p-2">
-            <div className="mb-1 text-[10px] uppercase tracking-widest text-slate-500">▮ Summon Rates</div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px]">
+          <div className="mt-3 border border-white/10 bg-black/30 p-2 text-[10px]">
+            <div className="mb-1 uppercase tracking-widest text-slate-500">▮ Pet Gacha Rates</div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
               {RARITY_ORDER.map((r) => (
                 <span key={r} style={{ color: rarityColor(r) }}>
                   {r} {PET_GACHA_RATES[r]}%
                 </span>
               ))}
             </div>
-            <div className="mt-1 text-[10px] text-slate-500">
+            <div className="mt-1 text-slate-500">
               Guaranteed LEGENDARY or better within {PET_PITY} summons. Duplicates raise ★ (max {PET_MAX_STAR}) and grant shards.
             </div>
           </div>
@@ -606,76 +891,8 @@ export function PetPanel({
         </div>
       )}
 
-      {tab === "collection" && (
-        <div>
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-[11px] text-slate-400">Equip a companion to fight beside you.</div>
-            {profile.activePet && (
-              <Btn color="#8a94a0" onClick={() => onEquip(null)}>
-                unequip
-              </Btn>
-            )}
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {profile.pets.length === 0 && (
-              <div className="text-xs text-slate-600">No companions bound yet. Try a summon!</div>
-            )}
-            {profile.pets.map((op) => {
-              const def = PETS[op.id];
-              if (!def) return null;
-              const active = profile.activePet === op.id;
-              const cost = starUpCost(op.star);
-              const mult = petStarMult(op.star);
-              return (
-                <div
-                  key={op.id}
-                  className="border bg-black/30 p-2"
-                  style={{
-                    borderColor: active ? def.color : rarityColor(def.rarity) + "44",
-                    boxShadow: active ? `0 0 18px ${def.color}33` : "none",
-                  }}
-                >
-                  <div className="flex items-start gap-2">
-                    <pre className="text-[8px] leading-none" style={{ color: def.color }}>
-                      {def.art.join("\n")}
-                    </pre>
-                    <div className="flex-1">
-                      <div className="text-xs glow" style={{ color: rarityColor(def.rarity) }}>
-                        {def.name}
-                      </div>
-                      <div className="text-[9px] uppercase tracking-widest text-slate-500">
-                        {def.rarity} · {def.element}
-                      </div>
-                      <div className="text-[10px] text-amber-300">{"★".repeat(op.star)}<span className="text-slate-700">{"★".repeat(PET_MAX_STAR - op.star)}</span></div>
-                    </div>
-                  </div>
-                  <div className="mt-1 text-[10px] text-slate-400">{def.desc}</div>
-                  <div className="mt-1 text-[10px] text-slate-300">
-                    DMG {(def.atkMult * mult * 100).toFixed(0)}% ATK · CD {def.cd.toFixed(1)}s · RNG {def.range}
-                  </div>
-                  <div className="text-[10px] text-emerald-300">
-                    {Object.entries(def.bonus)
-                      .map(([k, v]) => `${STAT_LABEL[k as keyof typeof STAT_LABEL]}+${fmtStat(k, (v as number) * mult)}`)
-                      .join("  ")}
-                  </div>
-                  <div className="mt-2 flex gap-1">
-                    <Btn color={active ? "#5fd17a" : def.color} disabled={active} onClick={() => onEquip(op.id)}>
-                      {active ? "equipped" : "equip"}
-                    </Btn>
-                    <Btn
-                      color="#7fd0ff"
-                      disabled={op.star >= PET_MAX_STAR || profile.petShards < cost}
-                      onClick={() => onStarUp(op.id)}
-                    >
-                      {op.star >= PET_MAX_STAR ? "max ★" : `★ up · ${cost}✧`}
-                    </Btn>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {showSummonAnim && <SummonAnimation results={showSummonAnim} onDone={() => setShowSummonAnim(null)} />}
+      {showCostumeAnim && <CostumeRevealAnimation results={showCostumeAnim} onDone={() => setShowCostumeAnim(null)} />}
     </Panel>
   );
 }
@@ -943,7 +1160,7 @@ export function GuidePanel({ onClose }: { onClose: () => void }) {
     start: [
       { title: "THE RUN", lines: ["The hero travels automatically from left to right.", "Each encounter is resolved 1v1 before the journey continues.", "Jump over spikes and pits; use Dash for temporary invulnerability."] },
       { title: "CONTROLS", lines: ["[SPACE / W] Jump", "[J] Attack   [SHIFT / S] Dash   [H] Potion", "[K L U I] Skills   [O] Ultimate   [Q] Auto-combat"] },
-      { title: "YOUR GOAL", lines: ["Defeat enemies, collect loot and gain experience.", "Reach each region boss, defeat it, then visit town.", "There is no final endpoint: regions and difficulty scale forever."] },
+      { title: "YOUR GOAL", lines: ["Defeat enemies, collect loot and gain experience.", "Defeat region bosses and towering BIG BOSSES; the 🏛 Town button unlocks at the top.", "There is no final endpoint: regions and difficulty scale forever."] },
       { title: "DIFFICULTY", lines: ["EASY 0–5,000m · NORMAL 5,000–15,000m · HARD 15,000–30,000m", "NIGHTMARE 30,000–50,000m · ABYSS 50,000m+ (scales forever).", "Higher tiers mean stronger foes but richer XP and gold.", "Your current tier is shown next to DIST in the Journey panel.", "Up to 10 heroes can be saved; use Save & Exit to switch safely."] },
     ],
     combat: [
@@ -951,7 +1168,8 @@ export function GuidePanel({ onClose }: { onClose: () => void }) {
       { title: "SURVIVAL", lines: ["Dash during boss warnings to avoid incoming damage.", "Jumping clears ground hazards but not every boss attack.", "Use a potion below 40% HP; its cooldown is shown on the control bar."] },
       { title: "MONSTER BEHAVIOUR", lines: ["Monsters chase you whenever you leave their attack range.", "From 5,000m they gain LUNGE; 15,000m adds VOLLEY.", "30,000m adds BURST and low-HP ENRAGE; 50,000m unlocks the full kit.", "Elites are always one skill tier ahead of normal foes.", "Watch for the '!' telegraph and dash away before it lands."] },
       { title: "WHEN YOU FALL", lines: ["By default your run restarts from the very beginning.", "Spend 1 Diamond ✦ to continue right where you fell.", "Diamonds only drop from bosses and are rare.", "Levels, gear, pets and currency are never lost on death."] },
-      { title: "BOSSES", lines: ["Gold-bordered health bars identify bosses.", "SLAM threatens nearby heroes; WAVE fires projectiles.", "RAIN targets your position; CHARGE closes distance quickly."] },
+      { title: "BOSSES", lines: ["Gold-bordered health bars identify bosses.", "Purple-bordered bars mark BIG BOSSES — titanic Colossi with far greater HP and rewards.", "SLAM threatens nearby heroes; WAVE fires projectiles.", "RAIN targets your position; CHARGE closes distance quickly."] },
+      { title: "CLASSES", lines: ["Warrior, Knight, Assassin, Ranger, Mage, Berserker, Gunner and Bard fight with steel, arrows and spells.", "The SUMMONER conjures spectral familiars, life-draining souls and astral packs to fight beside you.", "Earn titles through achievements; every class gains stats each level."] },
     ],
     progress: [
       { title: "EQUIPMENT", lines: ["Gear drops in seven rarities from COMMON to ANCIENT.", "Equip stronger items from the Bag panel.", "Use the town Blacksmith to enhance equipped gear with gold."] },
@@ -963,6 +1181,7 @@ export function GuidePanel({ onClose }: { onClose: () => void }) {
       { title: "UNLOCK", lines: ["The Companion Sanctum unlocks at Level 10.", "A Dust Sprite is granted and equipped automatically.", "Your active pet floats behind you and attacks targets in range."] },
       { title: "SUMMONING", lines: ["Summoning uses Spirit Orbs ❂, not Crystals.", "Single summon costs 30 ❂; ten summons cost 270 ❂.", "Spirit Orbs drop from enemies, chests and bosses.", "A LEGENDARY-or-better pet is guaranteed within 60 pulls."] },
       { title: "STARS & BONUSES", lines: ["Duplicate pets raise star level and grant Pet Shards.", "Use shards to star-up companions directly.", "Higher stars increase pet attack damage and owner stat bonuses."] },
+      { title: "COSTUMES", lines: ["The same Sanctum also contains the Veilwardrobe costume gacha tab.", "Costumes use the same Spirit Orb summon costs and the same rarity rates as pets.", "Wear an unlocked costume to change the hero's ASCII color accents and gain bonus stats.", "There is a separate costume pity counter, guaranteeing LEGENDARY+ within 60 pulls."] },
     ],
   };
 
@@ -1000,19 +1219,22 @@ export function DeathPanel({
   best,
   diamonds,
   reviveCost,
+  checkpointDistance,
   onContinue,
   onRevive,
-  onTown,
+  onReviveAtCheckpoint,
 }: {
   run: { distance: number; kills: number; bosses: number; goldEarned: number; maxCombo: number };
   best: number;
   diamonds: number;
   reviveCost: number;
+  checkpointDistance: number;
   onContinue: () => void;
   onRevive: () => void;
-  onTown: () => void;
+  onReviveAtCheckpoint: () => void;
 }) {
   const canContinue = diamonds >= reviveCost;
+  const hasCheckpoint = checkpointDistance > 0;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-red-950/80 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md border border-red-700/50 bg-black/90 p-6 text-center" style={{ boxShadow: "0 0 60px #ff000022" }}>
@@ -1054,15 +1276,27 @@ export function DeathPanel({
           )}
         </div>
 
-        <div className="mt-4 flex justify-center gap-3">
-          <Btn color="#5fd17a" onClick={onRevive}>
-            ↻ restart from the beginning
-          </Btn>
-          <Btn color="#ffd24b" onClick={onTown}>
-            ⌂ return to town
-          </Btn>
+        <div className="mt-4 flex flex-col gap-2">
+          <div className="flex justify-center gap-2">
+            <Btn color="#ff8a4a" onClick={onRevive}>
+              ↻ restart at beginning
+            </Btn>
+            <Btn
+              color="#ffd24b"
+              disabled={!hasCheckpoint}
+              onClick={onReviveAtCheckpoint}
+            >
+              ⌂ resume at checkpoint
+            </Btn>
+          </div>
         </div>
-        <div className="mt-3 text-[10px] text-slate-500">Permanent progression is always retained.</div>
+        <div className="mt-3 text-[10px] text-slate-500">
+          {hasCheckpoint
+            ? `Resume at your last save point (${checkpointDistance.toLocaleString()}m).`
+            : "No checkpoint yet — defeat a boss to save a checkpoint."}
+          {" "}
+          Permanent progression is always retained.
+        </div>
       </div>
     </div>
   );

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { DIAMOND_REVIVE_COST, Game, type HudSnapshot } from "../game/engine";
 import { sound } from "../game/audio";
-import { CLASSES, PETS, PET_MAX_STAR, PET_PULL10_COST, PET_PULL_COST, SKILLS } from "../game/content";
-import { type PullResult, generateItem, pullPetMany, starUpCost } from "../game/profile";
+import { CLASSES, COSTUMES, PETS, PET_MAX_STAR, PET_PULL10_COST, PET_PULL_COST, SKILLS } from "../game/content";
+import { type PullResult, generateItem, pullCostumes, pullPetMany, starUpCost } from "../game/profile";
 import { RNG } from "../game/rng";
 import { saveProfile } from "../game/save";
 import { type Item, type Profile, type Slot, RARITY_ORDER, SLOT_ORDER, type RunStats } from "../game/types";
@@ -42,6 +42,7 @@ export default function GameView({
   const [petMsg, setPetMsg] = useState("");
   const [pullResults, setPullResults] = useState<PullResult[]>([]);
   const [summonAnim, setSummonAnim] = useState<PullResult[] | null>(null);
+
   const [toast, setToast] = useState("");
   const [, bump] = useState(0);
   const deathTown = useRef(false);
@@ -211,6 +212,23 @@ export default function GameView({
     refresh();
     setPetMsg(id ? `${PETS[id].name} now fights beside you.` : "Companion dismissed.");
   };
+  const doCostumePull = (count: number) => {
+    const cost = count === 10 ? 270 : 30 * count;
+    if ((profile.spiritOrbs ?? 0) < cost) {
+      setPetMsg("Not enough Spirit Orbs for the Veilwardrobe.");
+      return;
+    }
+    profile.spiritOrbs -= cost;
+    const res = pullCostumes(profile, new RNG(Date.now() + profile.costumePulls * 3571), count);
+    setSummonAnim(res as any);
+    setPetMsg(`Wardrobe revealed ${res.length} style${res.length === 1 ? "" : "s"}.`);
+    refresh();
+  };
+  const equipCostume = (id: string | null) => {
+    profile.activeCostume = id;
+    refresh();
+    setPetMsg(id ? `${COSTUMES[id].name} equipped.` : "Costume unequipped.");
+  };
   const starUpPet = (id: string) => {
     const op = profile.pets.find((p) => p.id === id);
     if (!op || op.star >= PET_MAX_STAR) return;
@@ -263,10 +281,13 @@ export default function GameView({
             ✦ skills
           </Btn>
           <Btn color="#ff6fb0" onClick={() => setOverlay("pets")}>
-            ❖ pets
+            ❖ gatcha
           </Btn>
           <Btn color="#ffd24b" onClick={() => setOverlay("wallet")}>
             $ wallet
+          </Btn>
+          <Btn color="#ffae5a" onClick={() => setOverlay("town")}>
+            🏛 town
           </Btn>
           <Btn color="#7fd0ff" onClick={() => setOverlay("guide")}>
             ? guide
@@ -339,7 +360,7 @@ export default function GameView({
           onQuit={onQuit}
         />
       )}
-      {overlay === "char" && <CharacterPanel profile={profile} onClose={() => setOverlay("none")} />}
+      {overlay === "char" && <CharacterPanel profile={profile} onEquip={equipPet} onEquipCostume={equipCostume} onStarUp={starUpPet} onClose={() => setOverlay("none")} />}
       {overlay === "inv" && <InventoryPanel profile={profile} onEquip={equip} onSell={(it) => { profile.inventory = profile.inventory.filter(x => x.uid !== it.uid); profile.gold += Math.round(it.ilvl * 12 * (it.enhance ? 0.7 : 0.4) + 15); persist(); refresh(); flash(`Sold ${it.name}`); }} onClose={() => setOverlay("none")} />}
       {overlay === "skills" && <SkillsPanel profile={profile} onUpgrade={upgradeSkill} onClose={() => setOverlay("none")} />}
       {summonAnim && summonAnim.length > 0 && (
@@ -352,8 +373,7 @@ export default function GameView({
           profile={profile}
           results={pullResults}
           onPull={doPull}
-          onEquip={equipPet}
-          onStarUp={starUpPet}
+          onCostumePull={doCostumePull}
           onClose={() => { setOverlay("none"); setPetMsg(""); }}
           msg={petMsg}
         />
@@ -378,6 +398,7 @@ export default function GameView({
           best={profile.bestDistance}
           diamonds={profile.diamonds ?? 0}
           reviveCost={DIAMOND_REVIVE_COST}
+          checkpointDistance={profile.checkpointDistance ?? 0}
           onContinue={() => {
             if (g().continueWithDiamond()) {
               persist();
@@ -388,12 +409,12 @@ export default function GameView({
           onRevive={() => {
             g().reviveAtStart();
             setDeath(null);
+            bump((n) => n + 1);
           }}
-          onTown={() => {
-            deathTown.current = true;
+          onReviveAtCheckpoint={() => {
+            g().reviveAtCheckpoint();
             setDeath(null);
-            setTownRegion(hud?.regionIdx ?? 0);
-            setOverlay("town");
+            bump((n) => n + 1);
           }}
         />
       )}

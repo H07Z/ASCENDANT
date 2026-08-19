@@ -215,6 +215,7 @@ export interface BossDef {
   tokens: number;
   size: [number, number];
   attacks: BossAttack[];
+  isBigBoss?: boolean;
 }
 
 // ---- Regions ------------------------------------------------
@@ -266,6 +267,22 @@ export interface OwnedPet {
   star: number; // 1..5
 }
 
+export interface CostumeDef {
+  id: string;
+  name: string;
+  rarity: Rarity;
+  color: string;
+  accent: string;
+  desc: string;
+  art: string[];
+  bonus: Partial<Stats>;
+}
+
+export interface OwnedCostume {
+  id: string;
+  level: number;
+}
+
 // ---- Achievement -------------------------------------------
 export interface Achievement {
   id: string;
@@ -299,6 +316,10 @@ export interface Profile {
   materials: Record<string, number>;
   pets: OwnedPet[];
   activePet: string | null;
+  costumes: OwnedCostume[];
+  activeCostume: string | null;
+  costumePity: number;
+  costumePulls: number;
   petShards: number;
   spiritOrbs: number;
   diamonds: number; // rare boss-only currency, used to continue after death
@@ -310,6 +331,7 @@ export interface Profile {
   regionsCleared: number;
   autoCombat: boolean;
   sound: boolean;
+  checkpointDistance: number; // saved distance milestone (e.g. from Town/Beacon) to start from on defeat
 }
 
 // ---- Run statistics (resets each run) ----------------------

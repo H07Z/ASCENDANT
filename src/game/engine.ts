@@ -5,6 +5,7 @@ import {
   ACHIEVEMENTS,
   BOSSES,
   CLASSES,
+  COSTUMES,
   PETS,
   PLAYER_FRAMES,
   RARITY_COLOR,
@@ -178,6 +179,7 @@ export class Game {
   jumpQueued = false;
   buffAtk = 1;
   buffCrit = 0;
+  buffDef = 1;
   buffTimer = 0;
   bloodDripTimer = 0;
   autoAttackT = 0;
@@ -186,6 +188,7 @@ export class Game {
   rapidShotT = 0;
   rapidDmg = 0;
   rapidColor = "#5fd17a";
+  kiteCd = 0; // cooldown for tactical disengage backflips (ranged classes)
   petCd = 0;
   petBob = 0;
   skillCd: Record<string, number> = {};
@@ -230,8 +233,13 @@ export class Game {
     // immediately visible in-game, even before the first gacha summon.
     if (!Array.isArray(this.profile.pets)) this.profile.pets = [];
     if (typeof this.profile.petShards !== "number") this.profile.petShards = 0;
+    if (!Array.isArray(this.profile.costumes)) this.profile.costumes = [];
+    if (this.profile.activeCostume === undefined) this.profile.activeCostume = null;
+    if (typeof this.profile.costumePity !== "number") this.profile.costumePity = 0;
+    if (typeof this.profile.costumePulls !== "number") this.profile.costumePulls = 0;
     if (typeof this.profile.spiritOrbs !== "number") this.profile.spiritOrbs = 60;
     if (typeof this.profile.diamonds !== "number") this.profile.diamonds = 0;
+    if (typeof this.profile.checkpointDistance !== "number") this.profile.checkpointDistance = 0;
     if (typeof this.profile.petPity !== "number") this.profile.petPity = 0;
     if (typeof this.profile.petPulls !== "number") this.profile.petPulls = 0;
     let grantedStarterPet = false;
@@ -259,8 +267,8 @@ export class Game {
     if (grantedStarterPet) this.cb.onDirty?.();
   }
 
-  start() {
-    this.reset();
+  start(startDistance?: number) {
+    this.reset(startDistance);
     this.running = true;
     this.paused = false;
     this.last = performance.now();
@@ -268,10 +276,12 @@ export class Game {
     this.raf = requestAnimationFrame(this.loop);
   }
 
-  reset() {
+  reset(startDistance = 0) {
     this.world = new World();
-    this.worldCol = 0;
-    this.cameraX = 0;
+    const col = Math.round(startDistance / METERS_PER_CELL);
+    this.worldCol = col;
+    this.cameraX = col - PLAYER_COL;
+    this.world.genCol = col + 24;
     this.height = 0;
     this.vy = 0;
     this.onGround = true;
@@ -289,7 +299,7 @@ export class Game {
     this.shakeAmt = 0;
     this.flash = 0;
     this.skillCd = {};
-    this.run = { distance: 0, kills: 0, bosses: 0, goldEarned: 0, expEarned:0, regionIdx: 0, maxCombo: 0 };
+    this.run = { distance: startDistance, kills: 0, bosses: 0, goldEarned: 0, expEarned: 0, regionIdx: 0, maxCombo: 0 };
     this.applyProfile(true);
   }
 
@@ -479,6 +489,7 @@ export class Game {
       if (this.buffTimer <= 0) {
         this.buffAtk = 1;
         this.buffCrit = 0;
+        this.buffDef = 1;
       } else if (this.profile.classId === "berserker") {
         // Active Blood Rage continuously drips blood particles from Berserker's body
         this.bloodDripTimer -= dt;
@@ -525,18 +536,39 @@ export class Game {
     // Ranger/Gunner Rapid Fire locks the hero in place while the burst resolves.
     if (this.rapidLockT > 0) { this.updateRapidFire(dt); speed = 0; }
 
-    // Arcane Orb locks the Mage in place while the energy orb travels across the screen
+    // Arcane Orb, Energy Strike, Arcane Nova & Leviathan lock the caster in place while resolving
     const arcaneOrbActive = this.projectiles.some((p) => p.isArcaneOrb && !p.dead && p.fromPlayer);
-    if (arcaneOrbActive) {
+    const energyStrikeActive = this.projectiles.some((p) => p.isEnergyStrike && !p.dead && p.fromPlayer);
+    const novaActive = this.projectiles.some((p) => p.isNova && !p.dead && p.fromPlayer);
+    const leviathanActive = this.projectiles.some((p) => p.isLeviathan && !p.dead && p.fromPlayer);
+    if (arcaneOrbActive || energyStrikeActive || novaActive || leviathanActive) {
       speed = 0;
       this.castTimer = 0.15; // hold channeling pose
+    }
+
+    // Ranged class disengage backflip: if an enemy gets dangerously close (< 4.8 cells), leap backward to safe range!
+    const isRanged = ["ranger", "mage", "gunner", "summoner"].includes(this.profile.classId);
+    if (this.kiteCd > 0) this.kiteCd -= dt;
+
+    if (isRanged && !leviathanActive && !novaActive && !arcaneOrbActive && !energyStrikeActive && this.kiteCd <= 0 && this.onGround && this.motionPhase === "none" && !this.dead) {
+      const closeThreat = this.enemies.find((e) => !e.dead && e.hp > 0 && Math.abs(e.x - this.worldCol) < 4.8) ||
+        (this.boss && !this.boss.dead && this.boss.hp > 0 && Math.abs(this.boss.x - this.worldCol) < 5.8 ? this.boss : null);
+
+      if (closeThreat) {
+        const pitBehind = this.world.isChasm(Math.round(this.worldCol - 8));
+        if (!pitBehind) {
+          this.kiteCd = 3.2;
+          const clsColor = CLASSES[this.profile.classId]?.color ?? "#5fd17a";
+          this.startSkillMotion("backflip", 0.5, 3, ">>", clsColor, "DISENGAGE");
+          sound.dash();
+        }
+      }
     }
 
     // Dynamic skill motions (Leap, Dash, Blink, Backflip) take full control of movement
     if (this.motionPhase !== "none") { this.updateSkillMotion(dt); speed = 0; }
 
     // combat priority: stop completely in front of the enemy so we can fight 1v1 in proper range!
-    const isRanged = ["ranger", "mage", "gunner"].includes(this.profile.classId);
     const stopDistance = this.profile.classId === "ranger" ? 18.0 : isRanged ? 9.0 : 4.0;
     const frontTarget = this.findTarget(stopDistance);
     if (frontTarget && !frontTarget.dead && frontTarget.hp > 0) {
@@ -547,7 +579,7 @@ export class Game {
     this.cameraX = this.worldCol - PLAYER_COL;
 
     // Only progress run animation when moving; hold standing pose during combat or channeling stops
-    if (!this.dead && speed === 0 && this.state === "run" && ((frontTarget && !frontTarget.dead && frontTarget.hp > 0) || this.rapidLockT > 0 || arcaneOrbActive)) {
+    if (!this.dead && speed === 0 && this.state === "run" && ((frontTarget && !frontTarget.dead && frontTarget.hp > 0) || this.rapidLockT > 0 || arcaneOrbActive || energyStrikeActive || novaActive || leviathanActive)) {
       this.animT = 0;
     } else {
       this.animT += dt;
@@ -615,10 +647,10 @@ export class Game {
     // player auto-attack
     this.autoAttackT -= dt;
     const cls = CLASSES[this.profile.classId];
-    const ranged = ["ranger", "mage", "gunner"].includes(this.profile.classId);
+    const ranged = ["ranger", "mage", "gunner", "summoner"].includes(this.profile.classId);
     if (this.attackTimer > 0) this.attackTimer -= dt;
     if (this.castTimer > 0) this.castTimer -= dt;
-    if (this.autoAttackT <= 0 && this.rapidLockT <= 0) {
+    if (this.autoAttackT <= 0 && this.rapidLockT <= 0 && !novaActive && !arcaneOrbActive && !energyStrikeActive && !leviathanActive) {
       this.autoAttackT = 0.55 / Math.max(0.4, this.stats.atkspd);
       const hasTarget = this.findTarget(this.profile.classId === "ranger" ? 22 : ranged ? 14 : 6.2);
       if (hasTarget) {
@@ -710,6 +742,34 @@ export class Game {
           color: this.rng.pick(["#5fd17a", "#a8ffb2", "#ffffff", "#8fe0a0"]),
           ch: this.rng.pick(["·", "°", "~", "^", "v", "✧"]),
         });
+      }
+      if (p.isEnergyStrike && !p.dead) {
+        this.particles.push({
+          x: p.x + this.rng.range(-0.3, 0.3),
+          y: p.y + this.rng.range(-0.3, 0.3),
+          vx: this.rng.range(-1.2, 1.2),
+          vy: this.rng.range(-1.2, 1.2),
+          life: 0.35,
+          max: 0.35,
+          color: this.rng.pick(["#49b6ff", "#70d6ff", "#ffffff", "#b98bff"]),
+          ch: this.rng.pick(["✧", "✦", "*", "·", "°", "•"]),
+        });
+      }
+      if (p.isNova && !p.dead) {
+        // Nova shockwave: streams trailing plasma/energy particles behind the advancing wave front
+        const colors = ["#49b6ff", "#70d6ff", "#b98bff", "#ffffff", "#ff6fb0"];
+        for (let i = 0; i < 3; i++) {
+          this.particles.push({
+            x: p.x - this.rng.range(0.2, 2.5),
+            y: p.y + this.rng.range(-2.5, 2.5),
+            vx: -this.rng.range(2, 8),
+            vy: this.rng.range(-2, 2),
+            life: 0.4,
+            max: 0.4,
+            color: this.rng.pick(colors),
+            ch: this.rng.pick(["✹", "✦", "★", "❂", "≈", "▒", "░"]),
+          });
+        }
       }
       this.handleProj(p);
     }
@@ -975,13 +1035,14 @@ export class Game {
   }
 
   private basicAttack() {
+    if (this.projectiles.some((p) => p.isNova && !p.dead && p.fromPlayer)) return;
     const cls = CLASSES[this.profile.classId];
-    const ranged = ["ranger", "mage", "gunner"].includes(this.profile.classId);
+    const ranged = ["ranger", "mage", "gunner", "summoner"].includes(this.profile.classId);
     this.attackTimer = ranged ? 0.16 : 0.24;
     if (ranged) {
       sound.shoot();
       const wpn = this.profile.equipment.weapon;
-      const sym = this.profile.classId === "mage" ? "*" : this.profile.classId === "gunner" ? "•" : ">";
+      const sym = this.profile.classId === "mage" ? "*" : this.profile.classId === "gunner" ? "•" : this.profile.classId === "summoner" ? "◈" : ">";
       this.projectiles.push({
         x: this.weaponTipX(), y: this.weaponY(), vx: 16, vy: 0, life: 1.4,
         dmg: this.playerAtkValue(1, false).dmg, color: wpn ? RARITY_COLOR[wpn.rarity] : cls.color,
@@ -1025,6 +1086,7 @@ export class Game {
   }
 
   useSkill(index: number) {
+    if (this.projectiles.some((p) => p.isNova && !p.dead && p.fromPlayer)) return;
     const cls = CLASSES[this.profile.classId];
     const id = cls.skills[index];
     if (!id) return;
@@ -1080,6 +1142,31 @@ export class Game {
             skillMult *= (1 + missingHpPct * 0.5);
           }
           this.startSkillMotion("leap", skillMult, r, def.symbol, cls.color, "Cleave");
+        } else if (id === "soul_drain") {
+          // drain life from every foe in radius; siphon essence back to the summoner
+          let drained = 0;
+          const pfRow = this.playerFeetRow;
+          for (const e of this.enemies) {
+            if (e.dead) continue;
+            if (Math.abs(e.x - this.worldCol) <= r && Math.abs(e.feetRow - pfRow) <= 6) {
+              const v = this.playerAtkValue(baseMult, true);
+              this.dealDamage(e, v.dmg, v.crit, "#8fe0a0");
+              drained += Math.round(v.dmg * 0.08);
+              // essence streams flowing back to the summoner
+              this.particles.push({ x: e.x, y: e.feetRow - 2, vx: (this.worldCol - e.x) * 3, vy: -1.5, life: 0.5, max: 0.5, color: "#8fe0a0", ch: "❖" });
+            }
+          }
+          if (this.boss && !this.boss.dead && Math.abs(this.boss.x - this.worldCol) <= r + 3) {
+            const v = this.playerAtkValue(baseMult, true);
+            this.dealDamage(this.boss, v.dmg, v.crit, "#8fe0a0");
+            drained += Math.round(v.dmg * 0.05);
+          }
+          const heal = Math.min(this.maxHp - this.hp, Math.max(30, drained));
+          if (heal > 0) this.hp += heal;
+          this.headText(heal > 0 ? `SOUL DRAIN! +${heal} HP` : "SOUL DRAIN!", "#8fe0a0");
+          this.burst(this.worldCol, pfRow - 2, "#8fe0a0", 16);
+          this.flash = 0.25;
+          sound.skill("magic");
         } else if (id === "dissonant_chord") {
           this.aoeBlast(this.worldCol, r, baseMult, def.symbol, true);
         } else {
@@ -1110,6 +1197,39 @@ export class Game {
           });
           this.castTimer = 0.4;
           this.headText("ARCANE ORB!", "#49b6ff");
+          sound.skill("magic");
+          break;
+        }
+        if (id === "energy_strike") {
+          const tgt = this.findTarget(def.range ?? 18) ?? null;
+          const targetX = tgt ? tgt.x : this.worldCol + 14;
+          const targetY = tgt ? (tgt as Enemy).feetRow - 1.5 : this.playerFeetRow - 1.5;
+          const startX = this.weaponTipX();
+          const startY = this.weaponY();
+          const dist = Math.max(4, Math.abs(targetX - startX));
+          const totalArcTime = clamp(dist * 0.038, 0.45, 0.85);
+
+          this.projectiles.push({
+            x: startX,
+            y: startY,
+            vx: 0,
+            vy: 0,
+            life: totalArcTime + 0.15,
+            dmg: this.playerAtkValue(baseMult, true).dmg,
+            color: "#49b6ff",
+            fromPlayer: true,
+            symbol: "✧",
+            aoe: def.radius ?? 4,
+            isEnergyStrike: true,
+            startX,
+            startY,
+            targetX,
+            targetY,
+            arcTime: 0,
+            totalArcTime,
+          });
+          this.castTimer = 0.35;
+          this.headText("ENERGY STRIKE!", "#49b6ff");
           sound.skill("magic");
           break;
         }
@@ -1190,6 +1310,44 @@ export class Game {
           sound.shoot();
           break;
         }
+        if (id === "summon_familiar") {
+          // spectral familiar charges forward, piercing the enemy line
+          this.projectiles.push({
+            x: this.weaponTipX(), y: this.weaponY(), vx: this.facing * 20, vy: 0,
+            life: 1.3, dmg: this.playerAtkValue(baseMult, true).dmg, color: "#8fe0a0",
+            fromPlayer: true, symbol: "◆", pierce: 99,
+          });
+          this.particles.push({
+            x: this.worldCol, y: this.playerFeetRow - 3, vx: 0, vy: -3, life: 0.5, max: 0.5, color: "#8fe0a0", ch: "◈",
+          });
+          this.headText("FAMILIAR!", "#8fe0a0");
+          sound.skill("magic");
+          break;
+        }
+        if (id === "astral_pack") {
+          // three spectral beasts arc forward like a mini arrow-storm
+          const tgt = this.findTarget(def.range ?? 18) ?? null;
+          const centerX = tgt ? tgt.x : this.worldCol + 14;
+          const targetY = tgt ? (tgt as Enemy).feetRow - 1 : this.playerFeetRow - 1;
+          const startX = this.weaponTipX();
+          const startY = this.weaponY();
+          const offsets = [-2.2, 0, 2.2];
+          for (let i = 0; i < 3; i++) {
+            const targetX = centerX + offsets[i];
+            const dist = Math.max(4, Math.abs(targetX - startX));
+            const totalArcTime = clamp(dist * 0.03 + i * 0.04, 0.35, 0.7);
+            this.projectiles.push({
+              x: startX, y: startY, vx: 0, vy: 0, life: totalArcTime + 0.15,
+              dmg: this.playerAtkValue(baseMult, true).dmg, color: "#8fe0a0",
+              fromPlayer: true, symbol: "▲", aoe: def.radius ?? 4, isArrowShower: true,
+              startX, startY, targetX, targetY, arcTime: 0, totalArcTime, arcHeight: 5 + i,
+            });
+          }
+          this.castTimer = 0.35;
+          this.headText("ASTRAL PACK!", "#8fe0a0");
+          sound.skill("magic");
+          break;
+        }
         const sym = def.symbol[0] ?? ">";
         const n = id === "multi_shot" ? 3 : 1;
         for (let i = 0; i < n; i++) {
@@ -1239,6 +1397,21 @@ export class Game {
           this.buffAtk = 1.40;
           this.buffCrit = 15;
           this.headText("MIGHT SYMPHONY!", "#ff6fb0");
+        } else if (id === "spirit_barrier") {
+          this.buffTimer = 12;
+          this.buffDef = 1.6;
+          const mpGain = Math.round(this.maxMp * 0.25);
+          this.mp = Math.min(this.maxMp, this.mp + mpGain);
+          // swirling spirit shield particles around the summoner
+          for (let i = 0; i < 14; i++) {
+            const ang = (i / 14) * Math.PI * 2;
+            this.particles.push({
+              x: this.worldCol + Math.cos(ang) * 2.5, y: this.playerFeetRow - 2.5 + Math.sin(ang) * 2.5,
+              vx: Math.cos(ang) * 3, vy: Math.sin(ang) * 1.5, life: 0.7, max: 0.7, color: "#8fe0a0", ch: "◈",
+            });
+          }
+          this.headText(`SPIRIT BARRIER! +${mpGain} MP`, "#8fe0a0");
+          sound.skill("buff");
         } else {
           this.buffTimer = 10;
           this.buffAtk = 1.35;
@@ -1249,6 +1422,63 @@ export class Game {
         break;
       }
       case "ultimate": {
+        if (id === "apex_leviathan") {
+          // Summon a colossal spectral leviathan that sweeps the battlefield
+          const startX = this.worldCol;
+          const startY = this.playerFeetRow - 2;
+          const totalArcTime = 1.1;
+          this.projectiles.push({
+            x: startX, y: startY, vx: 24, vy: 0, life: totalArcTime,
+            dmg: this.playerAtkValue(baseMult, true).dmg, color: "#8fe0a0",
+            fromPlayer: true, symbol: "=███=", aoe: def.radius ?? 12,
+            isNova: true, novaProgress: 0, novaMaxDist: 24,
+            startX, startY, arcTime: 0, totalArcTime,
+          });
+          this.castTimer = totalArcTime;
+          this.headText("APEX LEVIATHAN!", "#8fe0a0");
+          sound.skill("explosion");
+          // summon surge particles
+          for (let i = 0; i < 20; i++) {
+            this.particles.push({
+              x: this.worldCol + this.rng.range(-1, 3), y: this.playerFeetRow - 2 + this.rng.range(-3, 2),
+              vx: this.rng.range(-3, 6), vy: this.rng.range(-4, 1),
+              life: this.rng.range(0.4, 0.8), max: 0.8, color: "#8fe0a0", ch: this.rng.pick(["▲", "◆", "◈", "✦", "*"]),
+            });
+          }
+          this.flash = 0.7;
+          this.shake(12);
+          break;
+        }
+        if (id === "nova") {
+          const startX = this.worldCol;
+          const startY = this.playerFeetRow - 2;
+          const totalArcTime = 0.9;
+
+          this.projectiles.push({
+            x: startX,
+            y: startY,
+            vx: 24, // sweeps left-to-right across the screen
+            vy: 0,
+            life: totalArcTime,
+            dmg: this.playerAtkValue(baseMult, true).dmg,
+            color: "#49b6ff",
+            fromPlayer: true,
+            symbol: "≈█❂✹❂█≈",
+            aoe: def.radius ?? 10,
+            isNova: true,
+            novaProgress: 0,
+            novaMaxDist: 22,
+            startX,
+            startY,
+            arcTime: 0,
+            totalArcTime,
+          });
+          this.castTimer = totalArcTime;
+          this.headText("ARCANE NOVA!", "#49b6ff");
+          sound.skill("explosion");
+          this.bloodSplash(this.worldCol, this.playerFeetRow - 2); // reuse radial particle shockwave
+          break;
+        }
         if (id === "fortress_break") {
           this.startSkillMotion("leap", baseMult, def.radius ?? 7, def.symbol, "#5fd0ff", def.name);
           break;
@@ -1317,13 +1547,56 @@ export class Game {
     sound.shoot();
   }
 
+  private triggerEnergyStrikeDetonation(p: Projectile) {
+    if (p.detonated) return;
+    p.detonated = true;
+    p.dead = true;
+    this.aoeBlast(p.x, p.aoe ?? 4, p.dmg / Math.max(1, this.stats.atk), "✧", true);
+    this.burst(p.x, p.y, "#49b6ff", 14);
+    this.shake(7);
+    this.flash = 0.3;
+    sound.skill("magic");
+  }
+
+  private triggerNovaDetonation(p: Projectile) {
+    if (p.detonated) return;
+    p.detonated = true;
+    p.dead = true;
+    this.aoeBlast(p.x, p.aoe ?? 10, p.dmg / Math.max(1, this.stats.atk), "❂", true);
+    this.burst(p.x, p.y, "#49b6ff", 40);
+    this.shake(14);
+    this.flash = 0.6;
+    sound.skill("explosion");
+  }
+
+  private triggerLeviathanDetonation(p: Projectile) {
+    if (p.detonated) return;
+    p.detonated = true;
+    p.dead = true;
+    this.aoeBlast(p.x, p.aoe ?? 12, p.dmg / Math.max(1, this.stats.atk), "█", true);
+    this.burst(p.x, p.y, "#8fe0a0", 40);
+    this.shake(16);
+    this.flash = 0.7;
+    sound.skill("explosion");
+  }
+
   private handleProj(p: Projectile) {
     if (p.fromPlayer) {
       // hit enemies/boss
       for (const e of this.enemies) {
         if (e.dead) continue;
-        if (Math.abs(e.x - p.x) < 1.4 && Math.abs(e.feetRow - 1 - p.y) < 2.8) {
-          if (p.isArrowShower) {
+        if (Math.abs(e.x - p.x) < 2.0 && Math.abs(e.feetRow - 1 - p.y) < 3.5) {
+          if (p.isNova) {
+            const crit = this.rng.chance(clamp(this.stats.crit, 0, 95) / 100);
+            this.dealDamage(e, p.dmg * (crit ? this.stats.critdmg / 100 : 1), crit, p.color);
+            this.burst(e.x, e.feetRow - 2, "#49b6ff", 12);
+          } else if (p.isLeviathan) {
+            const crit = this.rng.chance(clamp(this.stats.crit, 0, 95) / 100);
+            this.dealDamage(e, p.dmg * (crit ? this.stats.critdmg / 100 : 1), crit, p.color);
+            this.burst(e.x, e.feetRow - 2, "#8fe0a0", 14);
+          } else if (p.isEnergyStrike) {
+            this.triggerEnergyStrikeDetonation(p);
+          } else if (p.isArrowShower) {
             this.triggerArrowShowerDetonation(p);
           } else if (p.isBombard) {
             this.triggerBombardDetonation(p);
@@ -1345,8 +1618,18 @@ export class Game {
         }
       }
       if (this.boss && !this.boss.dead && !p.dead) {
-        if (Math.abs(this.boss.x - p.x) < this.boss.size[0] / 2 && Math.abs(this.boss.feetRow - this.boss.size[1] / 2 - p.y) < this.boss.size[1] / 2) {
-          if (p.isArrowShower) {
+        if (Math.abs(this.boss.x - p.x) < this.boss.size[0] / 2 + 1.5 && Math.abs(this.boss.feetRow - this.boss.size[1] / 2 - p.y) < this.boss.size[1] / 2 + 2) {
+          if (p.isNova) {
+            const crit = this.rng.chance(clamp(this.stats.crit, 0, 95) / 100);
+            this.dealDamage(this.boss, p.dmg * (crit ? this.stats.critdmg / 100 : 1), crit, p.color);
+            this.burst(this.boss.x, this.boss.feetRow - 2, "#49b6ff", 20);
+          } else if (p.isLeviathan) {
+            const crit = this.rng.chance(clamp(this.stats.crit, 0, 95) / 100);
+            this.dealDamage(this.boss, p.dmg * (crit ? this.stats.critdmg / 100 : 1), crit, p.color);
+            this.burst(this.boss.x, this.boss.feetRow - 2, "#8fe0a0", 22);
+          } else if (p.isEnergyStrike) {
+            this.triggerEnergyStrikeDetonation(p);
+          } else if (p.isArrowShower) {
             this.triggerArrowShowerDetonation(p);
           } else if (p.isBombard) {
             this.triggerBombardDetonation(p);
@@ -1369,6 +1652,15 @@ export class Game {
       if (p.isArrowShower && p.dead && !p.detonated) {
         this.triggerArrowShowerDetonation(p);
       }
+      if (p.isEnergyStrike && p.dead && !p.detonated) {
+        this.triggerEnergyStrikeDetonation(p);
+      }
+      if (p.isNova && p.dead && !p.detonated) {
+        this.triggerNovaDetonation(p);
+      }
+      if (p.isLeviathan && p.dead && !p.detonated) {
+        this.triggerLeviathanDetonation(p);
+      }
     } else {
       // enemy projectile hits player
       if (Math.abs(p.x - this.worldCol) < 1.6 && Math.abs(p.y - (this.playerFeetRow - 1.5)) < 2.8 && this.invuln <= 0) {
@@ -1381,7 +1673,8 @@ export class Game {
   // --------------------------------------------------------
   private hurt(dmg: number, _src: string) {
     if (this.invuln > 0 || this.dashT > 0) return;
-    const reduced = dmg * (1 - clamp(this.stats.def / (this.stats.def + 140), 0, 0.75));
+    const effDef = this.stats.def * this.buffDef;
+    const reduced = dmg * (1 - clamp(effDef / (effDef + 140), 0, 0.85));
     const final = Math.max(1, Math.round(reduced));
     this.hp -= final;
     this.hurtT = 0.25;
@@ -1478,23 +1771,21 @@ export class Game {
    */
   private spawnCoins(x: number, feetRow: number, totalGold: number, rich: boolean) {
     if (totalGold <= 0) return;
-    // Colossal gold eruption: shoots high into the air and scatters across half the screen!
+    // Gold eruption always splashes forward in front of the monster!
     const count = Math.max(4, Math.min(rich ? 25 : 15, Math.round(totalGold / 3) || 4));
     const per = Math.max(1, Math.floor(totalGold / count));
     let remaining = totalGold;
     for (let i = 0; i < count; i++) {
       const amount = i === count - 1 ? remaining : per;
       remaining -= amount;
-      // Scatter in wide forward and backward spread directions
-      const spreadDir = this.rng.chance(0.8) ? 1 : -0.5;
       this.pickups.push({
         kind: "coin",
         x,
         row: feetRow,
         bob: this.rng.range(0, 6),
         payload: { gold: amount },
-        // extreme velocity eruption for massive visual impact
-        vx: spreadDir * this.rng.range(22, rich ? 65 : 42),
+        // Always splash forward in front (positive velocity)
+        vx: this.rng.range(14, rich ? 52 : 32),
         vy: this.rng.range(22, rich ? 42 : 32),
         height: 2.5,
         landed: false,
@@ -1627,10 +1918,15 @@ export class Game {
     }
     this.checkAchievements();
     this.cb.onDirty?.();
+    const bossWasBig = b.isBigBoss;
     this.boss = null;
-    // offer town
-    const info = this.world.regionFor(this.worldCol * METERS_PER_CELL);
-    setTimeout(() => this.cb.onTown?.(info.regionIdx, info.cycle), 400);
+    // Update checkpoint distance so they can revive at this save point on defeat
+    this.profile.checkpointDistance = Math.max(this.profile.checkpointDistance ?? 0, this.run.distance);
+    this.headText("💾 CHRONOCRYSTAL SAVE POINT ACTIVATED!", "#8be9ff");
+    // Notify player that town upgrades are ready without stopping the run
+    setTimeout(() => {
+      this.headText(bossWasBig ? "★ BIG BOSS DEFEATED! 🏛 TOWN READY AT TOP ★" : "✦ BOSS DEFEATED! 🏛 TOWN READY AT TOP ✦", "#ffd24b");
+    }, 1400);
   }
 
   private grantGold(g: number) {
@@ -1816,6 +2112,11 @@ export class Game {
   /** Default death outcome: the run restarts from the very beginning. */
   reviveAtStart() {
     this.start(); // full world reset — distance, enemies and terrain all restart
+  }
+
+  /** Continue at saved checkpoint distance milestone. */
+  reviveAtCheckpoint() {
+    this.start(this.profile.checkpointDistance ?? 0);
   }
 
   /**
@@ -2122,6 +2423,40 @@ export class Game {
         // Feather/wind trail stream behind each arcing arrow in the shower
         this.grid.text(x - dir * 2, y - 1, "°~", darken("#5fd17a", 0.6));
         this.grid.text(x, y, arrowStr, "#5fd17a");
+      } else if (p.isEnergyStrike) {
+        const orbStr = "✧";
+        const dir = Math.sign((p.targetX ?? p.x) - (p.startX ?? p.x)) || 1;
+        const x = Math.round(sx);
+        const y = Math.round(p.y);
+        // Glowing cyan energy stream trailing behind the ascending/plunging strike orb
+        this.grid.text(x - dir * 2, y + 1, "°✦", darken("#49b6ff", 0.6));
+        this.grid.text(x, y, orbStr, "#49b6ff");
+      } else if (p.isNova) {
+        const novaStr = "≈█❂✹❂█≈";
+        const x = Math.round(sx - Math.floor(novaStr.length / 2));
+        const y = Math.round(p.y);
+
+        // Trailing plasma shockwave stream behind the advancing Nova surge
+        this.grid.text(x - 4, y - 1, "~~✦✹", darken("#49b6ff", 0.5));
+        this.grid.text(x - 3, y, "≡≡❂", "#b98bff");
+        this.grid.text(x - 4, y + 1, "~~✦✹", darken("#49b6ff", 0.5));
+        // Surging Nova energy wave front
+        this.grid.text(x, y, novaStr, "#49b6ff");
+        // White-hot core
+        this.grid.set(x + 3, y, "✹", "#ffffff");
+      } else if (p.isLeviathan) {
+        const levStr = p.symbol; // "===███==="
+        const x = Math.round(sx - Math.floor(levStr.length / 2));
+        const y = Math.round(p.y);
+        
+        // Massive abyssal trailing wake
+        this.grid.text(x - 6, y - 1, "~~≈≈", darken(p.color, 0.5));
+        this.grid.text(x - 8, y, "≈≈===≈≈", darken(p.color, 0.4));
+        this.grid.text(x - 6, y + 1, "~~≈≈", darken(p.color, 0.5));
+        
+        this.grid.text(x, y, levStr, p.color);
+        // Abyssal core
+        this.grid.set(x + 4, y, "❂", "#ffffff");
       } else {
         const trail = p.fromPlayer ? "·" : "·";
         this.grid.set(sx - Math.sign(p.vx), Math.round(p.y), trail, darken(p.color, 0.5));
@@ -2141,7 +2476,7 @@ export class Game {
     else state = "run";
 
     const frames = PLAYER_FRAMES[state] ?? PLAYER_FRAMES.idle;
-    const isRangedClass = ["ranger", "mage", "gunner"].includes(this.profile.classId);
+    const isRangedClass = ["ranger", "mage", "gunner", "summoner"].includes(this.profile.classId);
     const attackDuration = isRangedClass ? 0.16 : 0.24;
     const fi = state === "run"
       ? Math.floor(this.animT * 9) % frames.length
@@ -2154,6 +2489,8 @@ export class Game {
     const body = cls.bodyGlyph;
     const headColor = this.profile.equipment.helmet ? RARITY_COLOR[this.profile.equipment.helmet.rarity] : cls.color;
     const bodyColor = this.profile.equipment.chest ? RARITY_COLOR[this.profile.equipment.chest.rarity] : cls.color;
+    const costume = this.profile.activeCostume ? COSTUMES[this.profile.activeCostume] : null;
+    const costumeColor = costume?.color ?? cls.color;
     const wpn = this.profile.equipment.weapon;
     const wpnColor = wpn ? RARITY_COLOR[wpn.rarity] : cls.color;
 
@@ -2162,8 +2499,12 @@ export class Game {
     const h = art.length;
     const y0 = feetRow - h + 1;
 
-    const tint: Record<string, string> = { [head]: headColor, [body]: bodyColor };
-    this.grid.blitTinted(art, sx - 2, y0, cls.color, tint);
+    const tint: Record<string, string> = { [head]: costume ? costumeColor : headColor, [body]: costume ? costumeColor : bodyColor };
+    this.grid.blitTinted(art, sx - 2, y0, costume ? costumeColor : cls.color, tint);
+    if (costume) {
+      this.grid.set(sx - 3, y0 + 1, "◆", costume.accent);
+      this.grid.set(sx + 3, y0 + 1, "◆", costume.accent);
+    }
 
     // weapon overlay & dynamic attack swing animation
     if (wpn && !this.dead) {
@@ -2374,19 +2715,19 @@ export class Game {
       g.text(statusCenter - Math.floor(comboStr.length / 2), 3, comboStr, c);
     }
 
-    // boss bar — gold border with health bar perfectly centered inside
+    // boss / big boss bar — gold or royal purple border with health bar centered inside
     if (this.boss) {
       const b = this.boss;
       const bw = 62;
       const bx = Math.floor((COLS - bw) / 2);
       const by = 7;
-      // gold-bordered box, 5 rows tall so name / bar / hp all sit centered inside
-      g.box(bx, by - 1, bw, 5, "#ffd24b", `⚠ BOSS · ${b.title}`);
+      const headerStr = b.isBigBoss ? `★ ${b.title}` : `⚠ BOSS · ${b.title}`;
+      const borderColor = b.isBigBoss ? "#c46bff" : "#ffd24b";
+      g.box(bx, by - 1, bw, 5, borderColor, headerStr);
       const nameStr = b.name;
       g.text(bx + Math.floor((bw - nameStr.length) / 2), by, nameStr, b.color);
-      // bar centered horizontally inside the box (2-cell padding on each side)
       const barW = bw - 4;
-      g.barDamage(bx + 2, by + 1, barW, b.hp / b.maxHp, b.ghostHp / b.maxHp, bossPhase(b) >= 3 ? "#ff5d5d" : "#c0392b", "#ffd24b", "#1a0a05");
+      g.barDamage(bx + 2, by + 1, barW, b.hp / b.maxHp, b.ghostHp / b.maxHp, bossPhase(b) >= 3 ? "#ff5d5d" : (b.isBigBoss ? "#9b4bff" : "#c0392b"), "#ffd24b", "#1a0a05");
       const hpStr = `${Math.max(0, Math.round(b.hp)).toLocaleString("en-US")}/${b.maxHp.toLocaleString("en-US")}`;
       g.text(bx + Math.floor((bw - hpStr.length) / 2), by + 2, hpStr, "#ffd24b");
       if (b.action && !b.action.fired)

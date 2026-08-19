@@ -329,6 +329,7 @@ export interface Boss {
   dead: boolean;
   appeared: number;
   contactT: number;
+  isBigBoss?: boolean;
 }
 
 export function makeBoss(spawn: { x: number; bossId: string; regionIdx: number; level: number }, world: World): Boss {
@@ -366,6 +367,7 @@ export function makeBoss(spawn: { x: number; bossId: string; regionIdx: number; 
     dead: false,
     appeared: 0,
     contactT: 0.8,
+    isBigBoss: d.isBigBoss,
   };
 }
 
@@ -499,9 +501,15 @@ export interface Projectile {
   pierce?: number;
   dead?: boolean;
   detonated?: boolean;
+  reachedGround?: boolean;
   isArcaneOrb?: boolean;
   isBombard?: boolean;
   isArrowShower?: boolean;
+  isEnergyStrike?: boolean;
+  isNova?: boolean;
+  isLeviathan?: boolean;
+  novaProgress?: number;
+  novaMaxDist?: number;
   startX?: number;
   startY?: number;
   targetX?: number;
@@ -512,7 +520,49 @@ export interface Projectile {
 }
 
 export function updateProjectile(p: Projectile, dt: number) {
-  if ((p.isBombard || p.isArrowShower) && p.startX !== undefined && p.targetX !== undefined && p.totalArcTime) {
+  if (p.isNova && p.startX !== undefined && p.totalArcTime) {
+    p.arcTime = (p.arcTime ?? 0) + dt;
+    p.novaProgress = Math.min(1, p.arcTime / p.totalArcTime);
+    // Nova surge: originates at Mage body (startX) and sweeps left-to-right from startX-3 out to startX+novaMaxDist
+    const dist = p.novaMaxDist ?? 22;
+    p.x = p.startX - 3 + (dist + 3) * p.novaProgress;
+    if (p.novaProgress >= 1 || p.arcTime >= p.totalArcTime) {
+      p.dead = true;
+    }
+  } else if (p.isLeviathan && p.startX !== undefined && p.totalArcTime) {
+    p.arcTime = (p.arcTime ?? 0) + dt;
+    p.novaProgress = Math.min(1, p.arcTime / p.totalArcTime);
+    // Leviathan sweeps the entire screen from behind the hero
+    const dist = p.novaMaxDist ?? 36;
+    p.x = p.startX - 10 + (dist + 10) * p.novaProgress;
+    // undulating wave motion for the leviathan's height
+    p.y = (p.startY ?? p.y) + Math.sin(p.novaProgress * Math.PI * 4) * 2;
+    if (p.novaProgress >= 1 || p.arcTime >= p.totalArcTime) {
+      p.dead = true;
+    }
+  } else if (p.isEnergyStrike && p.startX !== undefined && p.targetX !== undefined && p.totalArcTime) {
+    p.arcTime = (p.arcTime ?? 0) + dt;
+    const progress = Math.min(1, p.arcTime / p.totalArcTime);
+    const dir = Math.sign(p.targetX - p.startX) || 1;
+    if (progress < 0.35) {
+      // Ascends UP and LEFT (recoiling energy behind Mage's staff)
+      const subP = progress / 0.35;
+      const leftShift = Math.sin(Math.PI * subP) * 3.5;
+      const heightRise = Math.sin(Math.PI * 0.5 * subP) * 6.0;
+      p.x = p.startX - dir * leftShift;
+      p.y = (p.startY ?? p.y) - heightRise;
+    } else {
+      // Plunges down-right onto the target monster
+      const subP = (progress - 0.35) / 0.65;
+      const apexX = p.startX - dir * 2.0;
+      const apexY = (p.startY ?? p.y) - 6.0;
+      p.x = apexX + (p.targetX - apexX) * subP;
+      p.y = apexY + ((p.targetY ?? p.y) - apexY) * subP;
+    }
+    if (progress >= 1 || p.arcTime >= p.totalArcTime) {
+      p.dead = true;
+    }
+  } else if ((p.isBombard || p.isArrowShower) && p.startX !== undefined && p.targetX !== undefined && p.totalArcTime) {
     p.arcTime = (p.arcTime ?? 0) + dt;
     const progress = Math.min(1, p.arcTime / p.totalArcTime);
     p.x = p.startX + (p.targetX - p.startX) * progress;

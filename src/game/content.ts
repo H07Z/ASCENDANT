@@ -6,6 +6,7 @@ import {
   type Achievement,
   type BossDef,
   type ClassDef,
+  type CostumeDef,
   type EnemyDef,
   type Palette,
   type PetDef,
@@ -240,6 +241,58 @@ export const BOSS_ART: Record<string, string[][]> = {
       "      ^  ^ ^  ^     ",
     ],
   ],
+  titan: [
+    [
+      "    ████████████████████████    ",
+      "   ███   ▲  CHRONOS  ▲   ███   ",
+      "  ███    ( ✪ )  ( ✪ )    ███  ",
+      "  ███     \\___██___/     ███  ",
+      " █████   /  /████\\  \\   █████ ",
+      " █████==/  / ████ \\  \\==█████ ",
+      "  ███  /  /  ████  \\  \\  ███  ",
+      "  ███ /__/   ████   \\__\\ ███  ",
+      "   ███       ████       ███   ",
+      "   / \\      /████\\      / \\   "
+    ],
+    [
+      "    ████████████████████████    ",
+      "   ███   ▲  CHRONOS  ▲   ███   ",
+      "  ███    ( ✵ )  ( ✵ )    ███  ",
+      "  ███     \\___██___/     ███  ",
+      " █████   \\  \\████/  /   █████ ",
+      " █████==\\  \\ ████ /  /==█████ ",
+      "  ███  \\  \\  ████  /  /  ███  ",
+      "  ███   \\__\\ ████ /__/   ███  ",
+      "   ███       ████       ███   ",
+      "  /   \\     /████\\     /   \\  "
+    ]
+  ],
+  leviathan: [
+    [
+      "   /\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\   ",
+      "  (  ▲  OVERLORD TYPHON  ▲  )  ",
+      " (   ( ❂ )    ▲    ( ❂ )   ) ",
+      "  (   \\_____//█\\\\_____/   )  ",
+      "   (    /===/███\\===\\    )   ",
+      "    (  /===/█████\\===\\  )    ",
+      "   /  /====\\█████/====\\  \\   ",
+      "  /  /      \\███/      \\  \\  ",
+      " (  /        \\█/        \\  ) ",
+      "  ~~          ~          ~~  "
+    ],
+    [
+      "   /\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\   ",
+      "  (  ▲  OVERLORD TYPHON  ▲  )  ",
+      " (   ( ✹ )    ▲    ( ✹ )   ) ",
+      "  (   \\_____//█\\\\_____/   )  ",
+      "   (    \\===\\███/===/    )   ",
+      "    (  \\===\\█████/===/  )    ",
+      "   /  /====\\█████/====\\  \\   ",
+      "  /  /      \\███/      \\  \\  ",
+      " (  /        \\█/        \\  ) ",
+      "  ~~          ~          ~~  "
+    ]
+  ]
 };
 
 // ----------------------------------------------------------
@@ -401,6 +454,18 @@ export const SKILLS: Record<string, SkillDef> = {
     radius: 5,
     symbol: "(❂)",
   },
+  energy_strike: {
+    id: "energy_strike",
+    name: "Energy Strike",
+    kind: "projectile",
+    desc: "Launch a radiant energy orb that ascends up-left before plunging down to strike the target.",
+    mana: 24,
+    cd: 4.5,
+    mult: 2.6,
+    range: 18,
+    radius: 4,
+    symbol: "✧",
+  },
   blood_rage: {
     id: "blood_rage",
     name: "Blood Rage",
@@ -472,16 +537,17 @@ export const SKILLS: Record<string, SkillDef> = {
     symbol: "vvv",
     ultimate: true,
   },
-  meteor: {
-    id: "meteor",
-    name: "Meteor",
+  nova: {
+    id: "nova",
+    name: "Arcane Nova",
     kind: "ultimate",
-    desc: "Call down a cataclysm of fire.",
+    desc: "Unleash a catastrophic nova blast originating from your body that surges across the battlefield from left to right with trailing energy shockwaves.",
     mana: 70,
     cd: 32,
-    mult: 5.5,
-    radius: 8,
-    symbol: "***",
+    mult: 6.0,
+    range: 22,
+    radius: 10,
+    symbol: "❂✹❂",
     ultimate: true,
   },
   frenzy: {
@@ -562,6 +628,62 @@ export const SKILLS: Record<string, SkillDef> = {
     symbol: "☼",
     ultimate: true,
   },
+  summon_familiar: {
+    id: "summon_familiar",
+    name: "Summon Familiar",
+    kind: "projectile",
+    desc: "Summon an arcane spirit familiar that charges forward, piercing all enemies.",
+    mana: 16,
+    cd: 3.0,
+    mult: 1.9,
+    range: 16,
+    symbol: "◈►",
+  },
+  spirit_barrier: {
+    id: "spirit_barrier",
+    name: "Spirit Barrier",
+    kind: "buff",
+    desc: "Call forth a surrounding spirit shield that boosts DEF and restores MP.",
+    mana: 20,
+    cd: 16,
+    mult: 0,
+    symbol: "🛡",
+  },
+  soul_drain: {
+    id: "soul_drain",
+    name: "Soul Drain",
+    kind: "aoe",
+    desc: "Siphon life essence from all surrounding foes to heal yourself and deal AoE damage.",
+    mana: 25,
+    cd: 8.0,
+    mult: 2.1,
+    radius: 6,
+    symbol: "❖",
+  },
+  astral_pack: {
+    id: "astral_pack",
+    name: "Astral Pack",
+    kind: "projectile",
+    desc: "Summon a pack of 3 spectral beasts that leap forward into the enemy line.",
+    mana: 35,
+    cd: 9.0,
+    mult: 2.4,
+    range: 18,
+    radius: 4,
+    symbol: "▲◈▲",
+  },
+  apex_leviathan: {
+    id: "apex_leviathan",
+    name: "Apex Leviathan",
+    kind: "ultimate",
+    desc: "Summon a colossal abyssal leviathan to crush the entire battlefield.",
+    mana: 75,
+    cd: 34,
+    mult: 6.2,
+    radius: 12,
+    symbol: "===███===",
+    ultimate: true,
+  },
 };
 
 // ----------------------------------------------------------
@@ -635,7 +757,7 @@ export const CLASSES: Record<string, ClassDef> = {
     weaponGlyph: "{*}",
     base: st({ hp: 340, mp: 170, atk: 30, def: 14, acc: 92, eva: 12, crit: 14, critdmg: 176, atkspd: 1.0, mvspd: 1.0, skilldmg: 45 }),
     growth: st({ hp: 24, mp: 14, atk: 3.0, def: 1.4, acc: 0.6, eva: 0.25, crit: 0.18, critdmg: 1.5, atkspd: 0.01, mvspd: 0, skilldmg: 4 }),
-    skills: ["fireball", "arcane_burst", "heal", "multi_shot", "meteor"],
+    skills: ["fireball", "arcane_burst", "heal", "energy_strike", "nova"],
   },
   berserker: {
     id: "berserker",
@@ -675,6 +797,19 @@ export const CLASSES: Record<string, ClassDef> = {
     base: st({ hp: 400, mp: 150, atk: 36, def: 20, acc: 93, eva: 15, crit: 12, critdmg: 160, atkspd: 1.1, mvspd: 1.05, skilldmg: 25 }),
     growth: st({ hp: 30, mp: 11, atk: 3.6, def: 2.0, acc: 0.55, eva: 0.3, crit: 0.16, critdmg: 1.2, atkspd: 0.01, mvspd: 0, skilldmg: 2 }),
     skills: ["melody_slash", "dissonant_chord", "symphony_of_might", "hymn_of_serenity", "calamity_requiem"],
+  },
+  summoner: {
+    id: "summoner",
+    name: "Summoner",
+    role: "Arcane Pet",
+    desc: "Master of the veil, conjuring spectral familiars and astral beasts to fight beside them.",
+    color: "#8fe0a0",
+    headGlyph: "✦",
+    bodyGlyph: "Y",
+    weaponGlyph: "░◈░",
+    base: st({ hp: 380, mp: 185, atk: 28, def: 14, acc: 93, eva: 14, crit: 12, critdmg: 168, atkspd: 1.05, mvspd: 1.0, skilldmg: 40 }),
+    growth: st({ hp: 27, mp: 15, atk: 2.8, def: 1.5, acc: 0.55, eva: 0.28, crit: 0.18, critdmg: 1.4, atkspd: 0.01, mvspd: 0, skilldmg: 3.6 }),
+    skills: ["summon_familiar", "soul_drain", "spirit_barrier", "astral_pack", "apex_leviathan"],
   },
 };
 
@@ -751,6 +886,16 @@ export const BOSSES: Record<string, BossDef> = {
     id: "sky_sovereign", name: "AURELYN", title: "Sovereign of the Void", artKey: "sovereign", color: "#ffe9a0",
     hp: 26000, atk: 150, def: 80, xp: 10000, gold: 4200, tokens: 60, size: [19, 8],
     attacks: [{ kind: "wave", windup: 1.0, dmgMult: 1.4 }, { kind: "rain", windup: 1.2, dmgMult: 1.5 }, { kind: "slam", windup: 1.1, dmgMult: 1.6 }],
+  },
+  titan_chronos: {
+    id: "titan_chronos", name: "CHRONOS", title: "★ BIG BOSS: Colossus of Time ★", artKey: "titan", color: "#ff4d4d",
+    hp: 48000, atk: 180, def: 90, xp: 20000, gold: 8500, tokens: 100, size: [28, 10], isBigBoss: true,
+    attacks: [{ kind: "slam", windup: 0.9, dmgMult: 1.8 }, { kind: "rain", windup: 1.1, dmgMult: 1.6 }, { kind: "charge", windup: 1.0, dmgMult: 2.0 }],
+  },
+  leviathan_typhon: {
+    id: "leviathan_typhon", name: "TYPHON", title: "★ BIG BOSS: Abyssal World Breaker ★", artKey: "leviathan", color: "#c46bff",
+    hp: 95000, atk: 240, def: 120, xp: 40000, gold: 18000, tokens: 200, size: [30, 10], isBigBoss: true,
+    attacks: [{ kind: "wave", windup: 0.8, dmgMult: 1.8 }, { kind: "slam", windup: 1.0, dmgMult: 2.2 }, { kind: "rain", windup: 1.1, dmgMult: 2.0 }],
   },
 };
 
@@ -895,6 +1040,25 @@ export const PET_MAX_STAR = 5;
 export const PET_DUPE_SHARDS: Record<Rarity, number> = {
   COMMON: 2, UNCOMMON: 4, RARE: 8, EPIC: 18, LEGENDARY: 45, MYTHIC: 100, ANCIENT: 220,
 };
+
+// Costume wardrobe gacha. It uses the same rarity rates as pets, but is
+// presented as a separate collection tab inside the same Sanctum panel.
+export const COSTUMES: Record<string, CostumeDef> = {
+  ember_mantle: { id: "ember_mantle", name: "Ember Mantle", rarity: "COMMON", color: "#ff9a5a", accent: "#ff4d1a", desc: "A warm cloak stitched from harmless cinders.", art: [" /\\ ", "(##)", " /\\ "], bonus: { hp: 60 } },
+  moss_runner: { id: "moss_runner", name: "Moss Runner", rarity: "COMMON", color: "#7fd17a", accent: "#bfffd0", desc: "Soft forest fibers that move like leaves.", art: [" /Y\\ ", "|Y Y|", " / \\ "], bonus: { eva: 2 } },
+  frost_circuit: { id: "frost_circuit", name: "Frost Circuit", rarity: "UNCOMMON", color: "#9fe0ff", accent: "#ffffff", desc: "A cold-lined mantle marked with pale runes.", art: [" .*. ", "[|*|]", " / \\ "], bonus: { mp: 80, def: 5 } },
+  dusk_ronin: { id: "dusk_ronin", name: "Dusk Ronin", rarity: "UNCOMMON", color: "#9b6bff", accent: "#d5b8ff", desc: "A silent coat for a hero who walks between shadows.", art: [" /@\\ ", "<|#|>", " / \\ "], bonus: { atk: 8, eva: 3 } },
+  starforged: { id: "starforged", name: "Starforged Aegis", rarity: "RARE", color: "#ffd24b", accent: "#fff0b0", desc: "Metal that remembers the shape of a fallen star.", art: [" /✦\\ ", "[###]", " / \\ "], bonus: { hp: 160, def: 12 } },
+  void_court: { id: "void_court", name: "Void Court", rarity: "EPIC", color: "#c46bff", accent: "#ff6fb0", desc: "A royal silhouette cut from an impossible night.", art: [" {✦} ", "<###>", " / \\ "], bonus: { atk: 18, skilldmg: 8, critdmg: 10 } },
+  sun_waltz: { id: "sun_waltz", name: "Sun Waltz", rarity: "LEGENDARY", color: "#ffe08a", accent: "#ffffff", desc: "A radiant ensemble that turns every step into a procession.", art: [" \\☼/ ", "<███>", " / \\ "], bonus: { hp: 300, atk: 28, mvspd: 0.06 } },
+  astral_regalia: { id: "astral_regalia", name: "Astral Regalia", rarity: "MYTHIC", color: "#ff6fb0", accent: "#9fe0ff", desc: "The wardrobe of a sovereign who dresses in constellations.", art: [" *✶* ", "{███}", " / \\ "], bonus: { hp: 600, atk: 45, skilldmg: 15, crit: 8 } },
+  eclipse_crown: { id: "eclipse_crown", name: "Eclipse Crown", rarity: "ANCIENT", color: "#ff7d52", accent: "#ffd24b", desc: "A living coronation of sunfire and shadow.", art: [" ☼█☼ ", "[███]", " / \\ "], bonus: { hp: 1000, atk: 80, def: 50, critdmg: 30 } },
+};
+export const COSTUME_LIST: CostumeDef[] = Object.values(COSTUMES);
+export const COSTUME_GACHA_RATES: Record<Rarity, number> = { ...PET_GACHA_RATES };
+export const COSTUME_PULL_COST = 30;
+export const COSTUME_PULL10_COST = 270;
+export const COSTUME_PITY = 60;
 
 /** Multiplier applied to a pet's bonus stats & damage for its star level. */
 export function petStarMult(star: number): number {

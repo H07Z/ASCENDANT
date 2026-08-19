@@ -12,9 +12,14 @@ function migrate(obj: Profile): Profile {
   if (!obj.id) obj.id = "c" + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
   if (!Array.isArray(obj.pets)) obj.pets = [];
   if (obj.activePet === undefined) obj.activePet = null;
+  if (!Array.isArray(obj.costumes)) obj.costumes = [];
+  if (obj.activeCostume === undefined) obj.activeCostume = null;
+  if (typeof obj.costumePity !== "number") obj.costumePity = 0;
+  if (typeof obj.costumePulls !== "number") obj.costumePulls = 0;
   if (typeof obj.petShards !== "number") obj.petShards = 0;
   if (typeof obj.spiritOrbs !== "number") obj.spiritOrbs = 60;
   if (typeof obj.diamonds !== "number") obj.diamonds = 0;
+  if (typeof obj.checkpointDistance !== "number") obj.checkpointDistance = 0;
   if (typeof obj.petPity !== "number") obj.petPity = 0;
   if (typeof obj.petPulls !== "number") obj.petPulls = 0;
   return obj;

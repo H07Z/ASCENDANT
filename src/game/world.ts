@@ -149,14 +149,18 @@ export class World {
       const diff = this.difficulty(dist);
       const regionEnd = info.regionStart + info.region.lengthM;
 
-      // boss near region end
+      // boss / big boss near region end
       const bossX = Math.round((regionEnd - 70) / METERS_PER_CELL);
       const bossKey = info.cycle * 10 + info.regionIdx;
       if (col >= bossX && !this.scheduledBoss.has(bossKey) && info.localDist > info.region.lengthM - 200) {
         this.scheduledBoss.add(bossKey);
-        // generous clear arena in front of & behind the boss spawn point
-        this.spawns.push({ kind: "boss", x: bossX + 14, bossId: info.region.boss, regionIdx: info.regionIdx, level: diff.level + 4 + info.cycle * 6 });
-        this.genCol = bossX + 34;
+        // Big Bosses (Titans / Colossi) appear at cycle milestones or final regions!
+        const isBigBoss = (info.regionIdx === 5 || info.cycle >= 1) && (info.cycle % 2 === 0 || info.regionIdx === 5);
+        const bossId = isBigBoss
+          ? (info.cycle % 2 === 0 ? "titan_chronos" : "leviathan_typhon")
+          : info.region.boss;
+        this.spawns.push({ kind: "boss", x: bossX + 14, bossId, regionIdx: info.regionIdx, level: diff.level + 5 + info.cycle * 8 });
+        this.genCol = bossX + 42;
         continue;
       }
 

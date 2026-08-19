@@ -3,6 +3,10 @@
 // ============================================================
 import {
   CLASSES,
+  COSTUMES,
+  COSTUME_GACHA_RATES,
+  COSTUME_LIST,
+  COSTUME_PITY,
   PETS,
   PET_DUPE_SHARDS,
   PET_GACHA_RATES,
@@ -53,6 +57,7 @@ export const CLASS_WEAPONS: Record<string, string[]> = {
   berserker: ["Greatsword", "War Axe", "Battleaxe", "Labrys", "Greataxe"],
   gunner: ["Hand Cannon", "Rifle", "Blaster", "Repeater", "Pulse Pistol"],
   bard: ["Lute", "Lyre", "Harp", "Mandolin", "Zither"],
+  summoner: ["Hexstaff", "Conjurer Staff", "Spirit Tome", "Grimoire", "Soul Reaver"],
 };
 
 const REGION_ADJ = [
@@ -251,6 +256,15 @@ export function petBonus(profile: Profile): Stats {
   return s;
 }
 
+export function costumeBonus(profile: Profile): Stats {
+  const s = emptyStats();
+  if (!profile.activeCostume) return s;
+  const costume = COSTUMES[profile.activeCostume];
+  if (!costume) return s;
+  (Object.keys(costume.bonus) as (keyof Stats)[]).forEach((k) => { s[k] = costume.bonus[k] ?? 0; });
+  return s;
+}
+
 /** The owned-pet record for the profile's active pet, if any. */
 export function activePetEntry(profile: Profile): OwnedPet | null {
   if (!profile.activePet) return null;
@@ -263,9 +277,10 @@ export function totalStats(profile: Profile): Stats {
   const eq = equipmentStats(profile);
   const title = titleBonus(profile);
   const pet = petBonus(profile);
+  const costume = costumeBonus(profile);
   const s = emptyStats();
   (Object.keys(s) as (keyof Stats)[]).forEach((k) => {
-    let v = base[k] + eq[k] + title[k] + pet[k];
+    let v = base[k] + eq[k] + title[k] + pet[k] + costume[k];
     if (k === "hp" || k === "mp") v = Math.round(v);
     else if (k === "atk" || k === "def") v = Math.round(v);
     s[k] = Math.round(v * 100) / 100;
@@ -313,6 +328,10 @@ export function newProfile(name: string, classId: string): Profile {
     materials: { iron: 3, leather: 2, crystal_shard: 0 },
     pets: [],
     activePet: null,
+    costumes: [],
+    activeCostume: null,
+    costumePity: 0,
+    costumePulls: 0,
     petShards: 0,
     spiritOrbs: 60,
     diamonds: 0,
@@ -324,6 +343,7 @@ export function newProfile(name: string, classId: string): Profile {
     regionsCleared: 0,
     autoCombat: false,
     sound: true,
+    checkpointDistance: 0,
   };
 }
 
@@ -340,6 +360,14 @@ export interface PullResult {
   duplicate: boolean;
   star: number;
   shards: number;
+  pity: boolean;
+}
+
+export interface CostumePullResult {
+  costumeId: string;
+  rarity: Rarity;
+  duplicate: boolean;
+  level: number;
   pity: boolean;
 }
 
@@ -404,4 +432,28 @@ export function pullPetMany(profile: Profile, rng: RNG, count: number): PullResu
 /** Spend shards to raise a pet's star without pulling duplicates. */
 export function starUpCost(star: number): number {
   return 40 + star * 60;
+}
+
+export function pullCostume(profile: Profile, rng: RNG): CostumePullResult {
+  profile.costumePulls += 1;
+  profile.costumePity += 1;
+  const forceHigh = profile.costumePity >= COSTUME_PITY;
+  const tiers = forceHigh ? HIGH_TIERS : RARITY_ORDER;
+  const weights = forceHigh ? [88, 10, 2] : tiers.map((r) => COSTUME_GACHA_RATES[r]);
+  const rarity = rng.weighted(tiers, weights);
+  if (HIGH_TIERS.includes(rarity)) profile.costumePity = 0;
+  const pool = COSTUME_LIST.filter((c) => c.rarity === rarity);
+  const def = pool.length ? rng.pick(pool) : COSTUME_LIST[0];
+  const owned = profile.costumes.find((c) => c.id === def.id);
+  if (owned) {
+    owned.level = Math.min(5, owned.level + 1);
+    return { costumeId: def.id, rarity: def.rarity, duplicate: true, level: owned.level, pity: forceHigh };
+  }
+  profile.costumes.push({ id: def.id, level: 1 });
+  if (!profile.activeCostume) profile.activeCostume = def.id;
+  return { costumeId: def.id, rarity: def.rarity, duplicate: false, level: 1, pity: forceHigh };
+}
+
+export function pullCostumes(profile: Profile, rng: RNG, count: number): CostumePullResult[] {
+  return Array.from({ length: count }, () => pullCostume(profile, rng));
 }
